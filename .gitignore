@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+*.pyc
+
+# Dados de cada máquina: prints dos botões do seu jogo, ajustes e log de erro
+botoes/
+ajustes.json
+erro.log
