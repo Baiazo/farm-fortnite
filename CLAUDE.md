@@ -18,11 +18,11 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 
 | Arquivo | Papel |
 |---|---|
-| `farm.py` | Janela Tk, captura dos botões (recorte em tela cheia), teste na tela, ciclo de vida |
-| `automacao.py` | Thread que lê a tela e clica + thread do anti-AFK (W/A/S/D só na partida) |
-| `visao.py` | Correlação normalizada (mesma conta do `TM_CCOEFF_NORMED`) via FFT com numpy, em meia resolução |
-| `entrada.py` | `SendInput` com scan codes e F8 por `RegisterHotKey`; DPI real e prioridade abaixo do normal |
-| `config.py` | `BOTOES` (a ordem é a prioridade de clique), `Ajustes` salvos em `ajustes.json`, `LIMITES` |
+| `farm.py` | Janela Tk com tema próprio (cores em `COR`, fontes Bahnschrift/Segoe UI), captura dos botões, teste na tela, ciclo de vida |
+| `automacao.py` | Thread que lê a tela e clica + thread do anti-AFK. Tudo que mexe fora do programa passa por `Sistema`, que os testes trocam por um falso |
+| `visao.py` | Correlação normalizada (mesma conta do `TM_CCOEFF_NORMED`) via FFT com numpy, em meia resolução; print preto e prints de travamento |
+| `entrada.py` | `SendInput` com scan codes, F8 por `RegisterHotKey`, janela em foco (título e classe, sem abrir o processo do jogo); DPI real e prioridade abaixo do normal |
+| `config.py` | `BOTOES` (a ordem é a prioridade de clique; `max_cliques` por botão), `Ajustes` salvos em `ajustes.json`, `LIMITES` |
 
 ## Regras
 
@@ -31,11 +31,14 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 - Nada de acesso à rede, leitura de memória do jogo, hook de teclado, código ofuscado ou .exe compilado.
 - Testes nunca mexem no mouse nem apertam tecla de verdade (o atalho é testado com F24).
 - Não abrir o Fortnite nem clicar na tela do Matheus sem pedir.
-- `botoes/`, `ajustes.json` e `erro.log` ficam fora do git: são prints do jogo e dados da máquina.
+- `botoes/`, `prints/`, `ajustes.json`, `registro.log` e `erro.log` ficam fora do git: são prints do
+  jogo e dados da máquina.
 - O repositório é privado. Só tornar público se o Matheus pedir.
 - Automatizar o jogo viola os termos da Epic e pode banir a conta: avisar quando uma mudança aumentar esse risco.
 
 ## Estado
 
-- 11 testes passando; janela conferida por print.
-- Ainda não testado no Fortnite de verdade (capturar os botões e ver os cliques pegarem).
+- 24 testes passando; janela, estados e captura conferidos por print com botões falsos.
+- Ainda não testado no Fortnite de verdade. No primeiro teste, conferir: se o Testar reconhece a
+  janela do jogo (classe `UnrealWindow`, título começando com "Fortnite"), se os cliques pegam e se
+  o Jogar some da tela depois do clique (senão o farm para após 3 cliques).

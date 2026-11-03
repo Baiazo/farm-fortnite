@@ -4,6 +4,9 @@ A conta é a mesma do OpenCV (TM_CCOEFF_NORMED): nota 1.0 é encaixe perfeito, p
 nada a ver. A correlação sai da FFT e a normalização de imagens integrais, então cada botão
 custa poucas dezenas de milissegundos mesmo em tela 1440p.
 """
+import os
+from datetime import datetime
+
 import numpy as np
 from PIL import Image, ImageGrab
 
@@ -14,6 +17,24 @@ ESCALA = 0.5
 def capturar_tela():
     """Print do monitor principal, em pixels físicos."""
     return ImageGrab.grab()
+
+
+def tela_preta(img):
+    """Print todo preto: é o que sai quando o jogo está em "Tela cheia" exclusiva."""
+    amostra = np.asarray(img.convert("L").resize((160, 90), Image.BOX))
+    return int(amostra.max()) <= 12
+
+
+def salvar_print(img, pasta, manter=20):
+    """Guarda o print em `pasta` e apaga os mais antigos, para a pasta não crescer sem fim."""
+    os.makedirs(pasta, exist_ok=True)
+    nome = datetime.now().strftime("travado-%Y%m%d-%H%M%S-%f")[:-3] + ".jpg"
+    caminho = os.path.join(pasta, nome)
+    img.convert("RGB").save(caminho, quality=90)
+    salvos = sorted(f for f in os.listdir(pasta) if f.startswith("travado-") and f.endswith(".jpg"))
+    for antigo in salvos[:-manter]:
+        os.remove(os.path.join(pasta, antigo))
+    return caminho
 
 
 def _preparar(img):

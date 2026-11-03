@@ -2,7 +2,9 @@
 __pycache__/
 *.pyc
 
-# Dados de cada máquina: prints dos botões do seu jogo, ajustes e log de erro
+# Dados de cada máquina: prints do seu jogo, ajustes e registros
 botoes/
+prints/
 ajustes.json
+registro.log*
 erro.log

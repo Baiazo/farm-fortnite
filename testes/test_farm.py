@@ -1,4 +1,5 @@
-"""Testes sem mexer no mouse nem no teclado: busca de botões, recorte, ajustes e atalho global."""
+"""Testes sem mexer no mouse nem no teclado: busca de botões, recorte, ajustes, laço do farm,
+anti-AFK e atalho global."""
 import ctypes
 import json
 import os
@@ -12,6 +13,7 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import automacao  # noqa: E402
 import entrada  # noqa: E402
 import visao  # noqa: E402
 from config import Ajustes  # noqa: E402
@@ -78,6 +80,17 @@ class TestVisao(unittest.TestCase):
         lisa = Image.new("RGB", (800, 600), (40, 40, 40))
         self.assertIsNotNone(visao.recortar(lisa, 10, 10, 200, 100)[1])      # sem desenho
 
+    def test_tela_preta(self):
+        self.assertTrue(visao.tela_preta(Image.new("RGB", (1920, 1080))))
+        self.assertFalse(visao.tela_preta(_tela_falsa()))
+
+    def test_salvar_print_mantem_so_os_ultimos(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            for _ in range(3):
+                visao.salvar_print(_tela_falsa(320, 180), pasta, manter=2)
+                time.sleep(0.002)  # nomes vêm do relógio, em milissegundos
+            self.assertEqual(len(os.listdir(pasta)), 2)
+
     def test_desempenho_seis_botoes_1440p(self):
         origem = _tela_falsa(semente=1)
         _desenhar_botao(origem, 300, 200, "JOGAR")
@@ -120,7 +133,167 @@ class TestAjustes(unittest.TestCase):
         self.assertEqual((a.limiar, a.anti_afk), (0.85, False))
 
 
+class SistemaFalso:
+    """Faz o papel de tela, mouse, teclado e relógio, e anota tudo o que o farm pediu."""
+
+    def __init__(self):
+        self.tempo = 1000.0
+        self.foco = True
+        self.tela = _tela_falsa(320, 180)
+        self.cliques = []
+        self.teclas = []  # ("apertar" ou "soltar", tecla)
+        self.prints = []
+
+    def agora(self):
+        return self.tempo
+
+    def capturar_tela(self):
+        return self.tela
+
+    def jogo_em_foco(self):
+        return self.foco
+
+    def clicar(self, x, y):
+        self.cliques.append((x, y))
+
+    def apertar(self, tecla):
+        self.teclas.append(("apertar", tecla))
+
+    def soltar(self, tecla):
+        self.teclas.append(("soltar", tecla))
+
+    def soltar_tudo(self):
+        pass
+
+    def salvar_print(self, img):
+        self.prints.append(img)
+        return os.path.join("prints", f"travado-{len(self.prints)}.jpg")
+
+
+def _visivel(x=100, y=200):
+    return (0.95, x, y)
+
+
+def _sumiu():
+    return (0.3, 0, 0)
+
+
+class TestAutomacao(unittest.TestCase):
+    def setUp(self):
+        self.sistema = SistemaFalso()
+        self.avisos = []
+        self.farm = automacao.Automacao(
+            Ajustes(), {}, lambda texto, tipo="info": self.avisos.append((tipo, texto)), self.sistema
+        )
+
+    def _tela(self, **notas):
+        """Uma leitura da tela, alguns segundos depois da anterior."""
+        self.sistema.tempo += 5
+        self.farm.processar({chave: n for chave, n in notas.items()})
+
+    def test_clica_no_botao_de_maior_prioridade(self):
+        self._tela(jogar=_visivel(10, 10), aviso=_visivel(50, 60))
+        self.assertEqual(self.sistema.cliques, [(50, 60)])
+
+    def test_partida_so_conta_quando_jogar_some(self):
+        self._tela(jogar=_visivel())
+        self.assertEqual((self.farm.partidas, self.farm.em_partida), (0, False))
+        self._tela(jogar=_sumiu())
+        self.assertEqual((self.farm.partidas, self.farm.em_partida), (1, True))
+        self._tela(voltar=_visivel())
+        self.assertFalse(self.farm.em_partida)
+        self.assertEqual(len(self.sistema.cliques), 2)
+
+    def test_para_quando_o_clique_nao_pega(self):
+        for _ in range(4):
+            self._tela(jogar=_visivel())
+        self.assertEqual(len(self.sistema.cliques), 3)
+        self.assertEqual(self.farm.partidas, 0)
+        self.assertTrue(self.farm.parar.is_set())
+        self.assertIn("administrador", self.avisos[-1][1])
+
+    def test_popups_seguidos_tem_mais_folga(self):
+        for _ in range(5):
+            self._tela(resgatar=_visivel())
+        self.assertFalse(self.farm.parar.is_set())
+        self.assertEqual(len(self.sistema.cliques), 5)
+
+    def test_nao_clica_sem_o_jogo_em_foco(self):
+        self.sistema.foco = False
+        self._tela(jogar=_visivel())
+        self.assertEqual(self.sistema.cliques, [])
+        # com a opção desligada, clica mesmo assim
+        self.farm.ajustes.so_com_jogo_em_foco = False
+        self._tela(jogar=_visivel())
+        self.assertEqual(len(self.sistema.cliques), 1)
+
+    def test_pausa_e_volta_com_o_foco(self):
+        self.sistema.foco = False
+        self.farm._passo()
+        self.farm._passo()
+        self.assertEqual(self.farm.situacao, "pausado")
+        self.assertEqual(sum("Pausado" in texto for _, texto in self.avisos), 1)
+        self.sistema.foco = True
+        self.farm._passo()
+        self.assertEqual(self.farm.situacao, "procurando")
+
+    def test_avisa_print_preto_uma_vez(self):
+        self.sistema.tela = Image.new("RGB", (320, 180))
+        for _ in range(automacao.PRETAS_PARA_AVISAR + 3):
+            self.farm._passo()
+        self.assertEqual(self.farm.situacao, "preto")
+        self.assertEqual(sum("preto" in texto for _, texto in self.avisos), 1)
+        self.sistema.tela = _tela_falsa(320, 180)
+        self.farm._passo()
+        self.assertEqual(self.farm.situacao, "procurando")
+
+    def test_salva_print_quando_nada_aparece(self):
+        self.sistema.tempo += automacao.TRAVADO_FORA - 10
+        self.farm.processar({}, "print")
+        self.assertEqual(self.sistema.prints, [])
+        self.sistema.tempo += 20
+        self.farm.processar({}, "print")
+        self.farm.processar({}, "print")
+        self.assertEqual(self.sistema.prints, ["print"])
+        self.assertIn("prints", self.avisos[-1][1])
+
+    def test_anti_afk_so_na_partida(self):
+        a = self.farm.ajustes
+        for _ in range(3):
+            self.sistema.tempo += a.afk_a_cada
+            self.farm._passo_afk()
+        self.assertEqual(self.sistema.teclas, [])
+
+        self.farm.em_partida = True
+        self.farm._passo_afk()
+        self.sistema.tempo += a.afk_a_cada
+        self.farm._passo_afk()
+        self.assertEqual(self.sistema.teclas[0][0], "apertar")
+        self.sistema.tempo += a.afk_segurar
+        self.farm._passo_afk()
+        self.assertEqual(self.sistema.teclas[1], ("soltar", self.sistema.teclas[0][1]))
+
+    def test_anti_afk_solta_a_tecla_se_o_jogo_sai_do_foco(self):
+        self.farm.em_partida = True
+        self.farm._passo_afk()
+        self.sistema.tempo += self.farm.ajustes.afk_a_cada
+        self.farm._passo_afk()
+        self.sistema.foco = False
+        self.sistema.tempo += 0.1
+        self.farm._passo_afk()
+        self.assertEqual([acao for acao, _ in self.sistema.teclas], ["apertar", "soltar"])
+        self.sistema.tempo += 60
+        self.farm._passo_afk()
+        self.assertEqual(len(self.sistema.teclas), 2)
+
+
 class TestEntrada(unittest.TestCase):
+    def test_reconhece_so_a_janela_do_jogo(self):
+        self.assertTrue(entrada.eh_janela_do_jogo("Fortnite  ", "UnrealWindow"))
+        self.assertFalse(entrada.eh_janela_do_jogo("Fortnite - YouTube - Google Chrome", "Chrome_WidgetWin_1"))
+        self.assertFalse(entrada.eh_janela_do_jogo("Fortnite.txt - Bloco de Notas", "Notepad"))
+        self.assertFalse(entrada.eh_janela_do_jogo("", ""))
+
     def test_tamanho_da_estrutura_input(self):
         # SendInput rejeita o evento se o tamanho não bater com o do Windows
         self.assertEqual(ctypes.sizeof(entrada.INPUT), 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28)

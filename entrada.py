@@ -16,11 +16,14 @@ INPUT_KEYBOARD = 1
 MOUSEEVENTF_MOVE = 0x0001
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_VIRTUALDESK = 0x4000
 MOUSEEVENTF_ABSOLUTE = 0x8000
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_SCANCODE = 0x0008
-SM_CXSCREEN = 0
-SM_CYSCREEN = 1
+SM_XVIRTUALSCREEN = 76
+SM_YVIRTUALSCREEN = 77
+SM_CXVIRTUALSCREEN = 78
+SM_CYVIRTUALSCREEN = 79
 
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
@@ -72,6 +75,10 @@ user32.GetMessageW.restype = wintypes.BOOL
 user32.RegisterHotKey.argtypes = (wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT)
 user32.UnregisterHotKey.argtypes = (wintypes.HWND, ctypes.c_int)
 user32.PostThreadMessageW.argtypes = (wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+user32.GetCursorPos.argtypes = (ctypes.POINTER(wintypes.POINT),)
+user32.GetForegroundWindow.restype = wintypes.HWND
+user32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+user32.GetClassNameW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
 kernel32.GetCurrentProcess.restype = wintypes.HANDLE
 kernel32.SetPriorityClass.argtypes = (wintypes.HANDLE, wintypes.DWORD)
 
@@ -93,6 +100,28 @@ def eh_admin():
         return False
 
 
+def janela_em_foco():
+    """Título e classe da janela em primeiro plano. Só pergunta ao Windows: não abre o processo do jogo."""
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return "", ""
+    titulo = ctypes.create_unicode_buffer(256)
+    classe = ctypes.create_unicode_buffer(256)
+    user32.GetWindowTextW(hwnd, titulo, 256)
+    user32.GetClassNameW(hwnd, classe, 256)
+    return titulo.value, classe.value
+
+
+def eh_janela_do_jogo(titulo, classe):
+    # o Fortnite usa a janela padrão do Unreal Engine; a classe evita confundir com uma aba
+    # "Fortnite" no navegador ou um vídeo do jogo
+    return classe == "UnrealWindow" and titulo.strip().lower().startswith("fortnite")
+
+
+def jogo_em_foco():
+    return eh_janela_do_jogo(*janela_em_foco())
+
+
 def _enviar(*eventos):
     lista = (INPUT * len(eventos))(*eventos)
     if user32.SendInput(len(eventos), lista, ctypes.sizeof(INPUT)) != len(eventos):
@@ -108,18 +137,31 @@ def _tecla(tecla, solta):
     return INPUT(type=INPUT_KEYBOARD, u=_Uniao(ki=KEYBDINPUT(wScan=SCAN[tecla], dwFlags=flags)))
 
 
+def posicao_cursor():
+    p = wintypes.POINT()
+    user32.GetCursorPos(ctypes.byref(p))
+    return p.x, p.y
+
+
 def mover(x, y):
-    """Põe o cursor em (x, y), em pixels do monitor principal."""
-    larg = user32.GetSystemMetrics(SM_CXSCREEN)
-    alt = user32.GetSystemMetrics(SM_CYSCREEN)
-    # no modo absoluto o SendInput usa 0..65535 para cobrir o monitor principal
-    nx = round(x * 65535 / max(larg - 1, 1))
-    ny = round(y * 65535 / max(alt - 1, 1))
-    _enviar(_mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, nx, ny))
+    """Põe o cursor em (x, y), em pixels da área de trabalho (o monitor principal começa em 0, 0)."""
+    vx = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    vy = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    larg = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    alt = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    # no modo absoluto o SendInput usa 0..65535 para cobrir todos os monitores juntos
+    nx = round((x - vx) * 65535 / max(larg - 1, 1))
+    ny = round((y - vy) * 65535 / max(alt - 1, 1))
+    _enviar(_mouse(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, nx, ny))
 
 
 def clicar(x, y):
-    """Leva o mouse até o botão e clica. O Fortnite só aceita o clique depois do hover."""
+    """Leva o mouse até o botão, clica e devolve o cursor para onde estava.
+
+    O Fortnite só aceita o clique depois do hover. Tirar o cursor de cima também desfaz o
+    destaque do hover, então o próximo print mostra se o botão sumiu mesmo.
+    """
+    antes = posicao_cursor()
     mover(x - 12, y - 6)
     time.sleep(0.06)
     mover(x, y)
@@ -127,6 +169,8 @@ def clicar(x, y):
     _enviar(_mouse(MOUSEEVENTF_LEFTDOWN))
     time.sleep(0.08)
     _enviar(_mouse(MOUSEEVENTF_LEFTUP))
+    time.sleep(0.1)
+    mover(*antes)
 
 
 def apertar(tecla):

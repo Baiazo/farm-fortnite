@@ -5,7 +5,9 @@ from dataclasses import asdict, dataclass, fields
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 PASTA_BOTOES = os.path.join(PASTA, "botoes")
+PASTA_PRINTS = os.path.join(PASTA, "prints")  # prints salvos quando o farm não reconhece nada
 ARQUIVO_AJUSTES = os.path.join(PASTA, "ajustes.json")
+ARQUIVO_REGISTRO = os.path.join(PASTA, "registro.log")
 
 
 @dataclass(frozen=True)
@@ -13,13 +15,16 @@ class Botao:
     chave: str  # nome do arquivo em botoes/
     nome: str   # rótulo na interface
     dica: str   # onde o botão aparece no jogo
+    # cliques seguidos sem o botão sumir antes de o farm desistir; pop-ups podem vir vários
+    # seguidos no mesmo lugar, então têm mais folga
+    max_cliques: int = 3
 
 
 # A ordem é a prioridade: se dois botões aparecem juntos, clica no primeiro da lista.
 # Pop-ups vêm antes porque tampam os outros botões.
 BOTOES = (
-    Botao("resgatar", "Resgatar tudo", "pop-up de recompensas"),
-    Botao("aviso", "Pop-up (OK/Fechar)", "aviso que trava a tela"),
+    Botao("resgatar", "Resgatar tudo", "pop-up de recompensas", max_cliques=10),
+    Botao("aviso", "Pop-up (OK/Fechar)", "aviso que trava a tela", max_cliques=10),
     Botao("voltar", "Voltar ao saguão", "fim da partida"),
     Botao("pular", "Pular", "tela de resultados"),
     Botao("continuar", "Continuar", "depois de ser eliminado"),
@@ -51,6 +56,7 @@ class Ajustes:
     intervalo: float = 2.0      # segundos entre leituras da tela
     pausa_cliques: float = 3.0  # tempo mínimo entre dois cliques
     anti_afk: bool = True       # segurar W/A/S/D durante a partida
+    so_com_jogo_em_foco: bool = True  # pausar quando o Fortnite sai do primeiro plano
     afk_a_cada: float = 10.0
     afk_segurar: float = 3.0
     sempre_no_topo: bool = False
