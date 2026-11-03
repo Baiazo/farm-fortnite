@@ -6,8 +6,10 @@ import ctypes
 import os
 import queue
 import sys
+import threading
 import time
 import tkinter as tk
+import winsound
 import tkinter.font as tkfont
 from tkinter import messagebox, ttk
 
@@ -25,7 +27,7 @@ except ImportError:
 import entrada
 import visao
 from automacao import Automacao
-from config import ARQUIVO_REGISTRO, BOTOES, LIMITES, PASTA, PASTA_BOTOES, Ajustes, caminho_botao
+from config import ARQUIVO_REGISTRO, BOTOES, LIMITES, PASTA, PASTA_BOTOES, PASTA_GRAVACAO, Ajustes, caminho_botao
 
 TITULO = "Farm Automático"
 
@@ -244,7 +246,7 @@ class Recorte:
 class App:
     def __init__(self):
         self.ajustes = Ajustes.carregar()
-        self.fila = queue.Queue()  # recados das outras threads: registro e atalho F8
+        self.fila = queue.Queue()  # recados das outras threads: registro e atalhos F8/F9
         self.automacao = None
         self.partidas = 0
         self.cliques = 0
@@ -253,6 +255,7 @@ class App:
         self.notas_teste = {}     # chave do botão -> nota no último "Testar"
         self.tem_jogar = False
         self.atalho = entrada.AtalhoGlobal(lambda: self.fila.put(("alternar", None)))
+        self.atalho_gravar = entrada.AtalhoGlobal(self._gravar, vk=entrada.VK_F9)
         self._vars = []           # o Tk perde a variável se ninguém guardar referência
         self._miniaturas = {}     # chave -> (data do arquivo, imagem), para não reler o PNG à toa
         self._mostrado = None     # último estado desenhado no topo
@@ -479,7 +482,8 @@ class App:
             f"Sem administrador: se os cliques não pegarem, abra {abrir} como administrador."
         )
         ttk.Label(
-            pai, text=f"F8 inicia e para de qualquer lugar. {admin}", style="Rodape.TLabel",
+            pai, text=f"F8 inicia e para de qualquer lugar. F9 salva um print da partida em gravacao. {admin}",
+            style="Rodape.TLabel",
             wraplength=self._px(320), justify="left",
         ).pack(side="bottom", anchor="w")
 
@@ -779,6 +783,38 @@ class App:
             self.capturando = False
             self.root.deiconify()
 
+    def _gravar(self):
+        """F9: print da tela inteira em gravacao/, material para ensinar o farm a ler a partida.
+
+        Roda na thread do atalho: o print sai na hora e o PNG é gravado em outra thread, para
+        apertos seguidos não atrasarem os próximos prints. O bipe avisa quem está no jogo.
+        """
+        def avisar(texto, tipo):
+            self.fila.put(("log", (texto, tipo)))
+
+        try:
+            img = visao.capturar_tela()
+        except OSError as e:  # tela bloqueada, por exemplo; um erro aqui não pode derrubar o F9
+            winsound.MessageBeep(winsound.MB_ICONHAND)
+            avisar(f"F9: não consegui tirar o print ({e}).", "erro")
+            return
+        if visao.tela_preta(img):
+            winsound.MessageBeep(winsound.MB_ICONHAND)
+            avisar("F9: o print saiu preto. No Fortnite, use “Tela cheia em janela”.", "erro")
+            return
+
+        def salvar():
+            try:
+                caminho = visao.salvar_gravacao(img, PASTA_GRAVACAO)
+            except OSError as e:
+                winsound.MessageBeep(winsound.MB_ICONHAND)
+                avisar(f"F9: não consegui salvar o print ({e}).", "erro")
+                return
+            winsound.MessageBeep(winsound.MB_OK)
+            avisar(f"F9: print salvo em gravacao\\{os.path.basename(caminho)}", "ok")
+
+        threading.Thread(target=salvar, daemon=True).start()
+
     # ---------- ciclo de vida ----------
 
     def _estado(self):
@@ -841,6 +877,9 @@ class App:
         erro = self.atalho.iniciar()
         if erro:
             self.log(f"F8 indisponível ({erro}). Use o botão Iniciar/Parar.", "aviso")
+        erro = self.atalho_gravar.iniciar()
+        if erro:
+            self.log(f"F9 indisponível ({erro}): outro programa usa essa tecla.", "aviso")
         if self.tem_jogar:
             self.log("Pronto. Abra o Fortnite no saguão e aperte F8.")
         else:
@@ -852,6 +891,7 @@ class App:
     def sair(self):
         self.parar()
         self.atalho.encerrar()
+        self.atalho_gravar.encerrar()
         self._salvar_ajustes()
         self.root.destroy()
 

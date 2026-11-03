@@ -29,6 +29,7 @@ WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
 MOD_NOREPEAT = 0x4000
 VK_F8 = 0x77
+VK_F9 = 0x78
 BELOW_NORMAL_PRIORITY_CLASS = 0x4000
 
 # Scan codes físicos: o jogo lê a posição da tecla, não a letra
@@ -203,7 +204,8 @@ class AtalhoGlobal(threading.Thread):
 
     def run(self):
         self._id_thread = kernel32.GetCurrentThreadId()
-        if not user32.RegisterHotKey(None, 1, MOD_NOREPEAT, self.vk):
+        # id = tecla: dois atalhos (F8 e F9) não se confundem
+        if not user32.RegisterHotKey(None, self.vk, MOD_NOREPEAT, self.vk):
             self.erro = ctypes.WinError(ctypes.get_last_error())
             self._pronto.set()
             return
@@ -216,7 +218,7 @@ class AtalhoGlobal(threading.Thread):
                 if msg.message == WM_HOTKEY:
                     self.ao_apertar()
         finally:
-            user32.UnregisterHotKey(None, 1)
+            user32.UnregisterHotKey(None, self.vk)
 
     def iniciar(self):
         """Começa a escutar. Devolve o erro se a tecla já estiver em uso por outro programa."""

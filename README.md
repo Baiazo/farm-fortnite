@@ -21,8 +21,8 @@ W/A/S/D de vez em quando para o jogo não te expulsar por inatividade.
 - Se passar 10 min sem reconhecer nenhum botão (35 min durante a partida), salva um print em
   `prints/` para você ver qual tela travou e capturar o botão que falta.
 - Guarda o registro em `registro.log`, para conferir depois o que aconteceu numa sessão longa.
-- F8 é registrado no sistema com `RegisterHotKey`: não existe hook de teclado, ele não lê o que
-  você digita.
+- F8 e F9 são registrados no sistema com `RegisterHotKey`: não existe hook de teclado, ele não lê
+  o que você digita.
 - Roda com prioridade abaixo do normal para não pesar no jogo.
 - **Não** lê nem altera a memória do jogo, **não** acessa a internet e **não** precisa de
   administrador para abrir. Todo o código está aqui, em texto, sem nada criptografado. O
@@ -79,6 +79,23 @@ jogo, capture de novo.
 3. O topo da janela mostra o que ele está fazendo (procurando botões, na partida, pausado) e a
    faixa colorida em cima muda de cor junto. O registro mostra cada clique.
 
+## Gravar prints da partida (F9)
+
+Material para ensinar o farm a jogar a partida (ir para a zona segura, achar baú). Com o farm
+aberto, jogue uma partida normal você mesmo e aperte **F9** quando aparecer algo útil: ele salva
+um print da tela inteira, sem perda, em `gravacao/` (ao lado do `Farm.exe` ou do `farm.py`) e dá
+um bipe. Não precisa iniciar o farm para isso.
+
+O que vale gravar, cada um algumas vezes e em lugares diferentes do mapa:
+
+- a bússola no topo da tela, olhando para lados diferentes;
+- o minimapa com o círculo da zona, com você dentro e fora dela;
+- você dentro da tempestade;
+- com "Visualizar efeitos sonoros" ligado, o ícone de baú em volta da mira;
+- o aviso para abrir um baú, quando chega perto dele.
+
+Com o farm aberto, o F9 é dele: o jogo não recebe essa tecla. A pasta nunca é limpa sozinha.
+
 ## Problemas comuns
 
 | Sintoma | O que fazer |
@@ -93,6 +110,7 @@ jogo, capture de novo.
 | Parou sozinho: "cliquei 3 vezes" | O jogo não aceitou o clique. Abra como administrador. Se o botão aceita o clique mas continua igual na tela, capture outro pedaço dele. |
 | Apareceu print em `prints/` | Ele ficou 10 min sem reconhecer nada. Abra o print, veja qual botão estava na tela e capture. |
 | F8 não funciona | Outro programa já usa F8; use o botão Iniciar/Parar. |
+| F9 não dá bipe | Veja o registro: outro programa pode estar usando o F9, ou o som do Windows está mudo (o print é salvo do mesmo jeito). |
 
 ## Ajustes
 
@@ -117,3 +135,4 @@ Ficam salvos em `ajustes.json`, na pasta do programa (ao lado do `Farm.exe` ou d
 | `testes/` | Testes da busca, dos ajustes, do laço, do anti-AFK e da troca do exe (`python -m unittest discover -s testes`) |
 | `registro.log` | Registro de tudo o que ele fez (o anterior fica em `registro.log.1`) |
 | `prints/` | Prints de quando ele travou (guarda os 20 mais novos) |
+| `gravacao/` | Prints que você salvou com o F9 (nunca apaga) |

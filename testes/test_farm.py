@@ -3,6 +3,7 @@ anti-AFK e atalho global."""
 import ctypes
 import json
 import os
+import queue
 import sys
 import tempfile
 import time
@@ -17,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import automacao  # noqa: E402
 import config  # noqa: E402
 import entrada  # noqa: E402
+import farm  # noqa: E402
 import gerar_exe  # noqa: E402
 import visao  # noqa: E402
 from config import Ajustes  # noqa: E402
@@ -93,6 +95,16 @@ class TestVisao(unittest.TestCase):
                 visao.salvar_print(_tela_falsa(320, 180), pasta, manter=2)
                 time.sleep(0.002)  # nomes vêm do relógio, em milissegundos
             self.assertEqual(len(os.listdir(pasta)), 2)
+
+    def test_gravacao_sem_perda_e_sem_apagar(self):
+        tela = _tela_falsa(320, 180)
+        with tempfile.TemporaryDirectory() as pasta:
+            for _ in range(25):  # mais que os 20 que o salvar_print guarda
+                caminho = visao.salvar_gravacao(tela, os.path.join(pasta, "gravacao"))
+                time.sleep(0.002)
+            self.assertEqual(len(os.listdir(os.path.dirname(caminho))), 25)
+            with Image.open(caminho) as lida:
+                self.assertEqual(np.asarray(lida.convert("RGB")).tobytes(), np.asarray(tela.convert("RGB")).tobytes())
 
     def test_desempenho_seis_botoes_1440p(self):
         origem = _tela_falsa(semente=1)
@@ -313,6 +325,47 @@ class TestEntrada(unittest.TestCase):
         atalho.encerrar()
         atalho.join(2)
         self.assertFalse(atalho.is_alive())
+
+    def test_dois_atalhos_ao_mesmo_tempo(self):
+        # como F8 e F9 na janela; F23 e F24 porque ninguém usa
+        atalhos = [entrada.AtalhoGlobal(lambda: None, vk=vk) for vk in (0x86, 0x87)]
+        try:
+            self.assertEqual([a.iniciar() for a in atalhos], [None, None])
+        finally:
+            for a in atalhos:
+                a.encerrar()
+                a.join(2)
+        self.assertFalse(any(a.is_alive() for a in atalhos))
+
+
+class TestGravacaoF9(unittest.TestCase):
+    """O F9 com um print falso: não olha a tela de verdade nem toca bipe."""
+
+    class _App:
+        def __init__(self):
+            self.fila = queue.Queue()
+
+    def _apertar_f9(self, tela):
+        app, bipes = self._App(), []
+        with tempfile.TemporaryDirectory() as pasta, \
+                mock.patch.object(visao, "capturar_tela", lambda: tela), \
+                mock.patch.object(farm.winsound, "MessageBeep", bipes.append), \
+                mock.patch.object(farm, "PASTA_GRAVACAO", pasta):
+            farm.App._gravar(app)
+            _, (texto, tipo) = app.fila.get(timeout=5)  # o PNG é gravado em outra thread
+            return texto, tipo, bipes, os.listdir(pasta)
+
+    def test_salva_e_avisa(self):
+        texto, tipo, bipes, arquivos = self._apertar_f9(_tela_falsa(320, 180))
+        self.assertEqual(tipo, "ok")
+        self.assertEqual(len(arquivos), 1)
+        self.assertIn(arquivos[0], texto)
+        self.assertEqual(bipes, [farm.winsound.MB_OK])
+
+    def test_print_preto_nao_salva(self):
+        texto, tipo, bipes, arquivos = self._apertar_f9(Image.new("RGB", (320, 180)))
+        self.assertEqual((tipo, arquivos), ("erro", []))
+        self.assertEqual(bipes, [farm.winsound.MB_ICONHAND])
 
 
 def _escrever(caminho, texto=""):

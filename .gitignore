@@ -5,6 +5,7 @@ __pycache__/
 # Dados de cada máquina: prints do seu jogo, ajustes e registros
 botoes/
 prints/
+gravacao/
 ajustes.json
 registro.log*
 erro.log

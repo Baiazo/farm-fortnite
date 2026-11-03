@@ -37,6 +37,16 @@ def salvar_print(img, pasta, manter=20):
     return caminho
 
 
+def salvar_gravacao(img, pasta):
+    """Print do F9 em PNG, sem perda (vira material para recortar a bússola, o minimapa...).
+    Nunca apaga nada: quem limpa a pasta é o usuário."""
+    os.makedirs(pasta, exist_ok=True)
+    nome = datetime.now().strftime("partida-%Y%m%d-%H%M%S-%f")[:-3] + ".png"
+    caminho = os.path.join(pasta, nome)
+    img.convert("RGB").save(caminho)
+    return caminho
+
+
 def _preparar(img):
     """Cinza, reduzido pela ESCALA, em float64."""
     cinza = img.convert("L")

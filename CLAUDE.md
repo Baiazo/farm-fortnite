@@ -1,7 +1,7 @@
 # Farm Automático — Fortnite
 
 Bot em Python que farma partidas do Fortnite em português: reconhece os botões na tela por imagem
-e clica sozinho. Repositório privado: https://github.com/Baiazo/farm-fortnite
+e clica sozinho. Repositório público: https://github.com/Baiazo/farm-fortnite
 
 ## Origem
 
@@ -22,10 +22,10 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 
 | Arquivo | Papel |
 |---|---|
-| `farm.py` | Janela Tk com tema próprio (cores em `COR`, fontes Bahnschrift/Segoe UI), captura dos botões, teste na tela, ciclo de vida |
+| `farm.py` | Janela Tk com tema próprio (cores em `COR`, fontes Bahnschrift/Segoe UI), captura dos botões, teste na tela, F9 que grava prints, ciclo de vida |
 | `automacao.py` | Thread que lê a tela e clica + thread do anti-AFK. Tudo que mexe fora do programa passa por `Sistema`, que os testes trocam por um falso |
 | `visao.py` | Correlação normalizada (mesma conta do `TM_CCOEFF_NORMED`) via FFT com numpy, em meia resolução; print preto e prints de travamento |
-| `entrada.py` | `SendInput` com scan codes, F8 por `RegisterHotKey`, janela em foco (título e classe, sem abrir o processo do jogo); DPI real e prioridade abaixo do normal |
+| `entrada.py` | `SendInput` com scan codes, F8 e F9 por `RegisterHotKey` (id = tecla), janela em foco (título e classe, sem abrir o processo do jogo); DPI real e prioridade abaixo do normal |
 | `config.py` | `BOTOES` (a ordem é a prioridade de clique; `max_cliques` por botão), `Ajustes` salvos em `ajustes.json`, `LIMITES` |
 | `gerar_exe.py` | Chama o PyInstaller (ícone e versão gerados na hora em `build/`) e troca o programa em `dist\Farm\` mantendo os dados |
 
@@ -39,15 +39,22 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
   ofuscado e nunca no git (`build/` e `dist/` estão no `.gitignore`).
 - Testes nunca mexem no mouse nem apertam tecla de verdade (o atalho é testado com F24).
 - Não abrir o Fortnite nem clicar na tela do Matheus sem pedir.
-- `botoes/`, `prints/`, `ajustes.json`, `registro.log` e `erro.log` ficam fora do git: são prints do
-  jogo e dados da máquina.
-- O repositório é privado. Só tornar público se o Matheus pedir.
+- `botoes/`, `prints/`, `gravacao/`, `ajustes.json`, `registro.log` e `erro.log` ficam fora do git:
+  são prints do jogo e dados da máquina.
+- O repositório é público desde a criação (2026-11-03), por escolha do Matheus. Tudo que vai para o
+  git fica aberto: nada de print do jogo, dado da máquina, senha ou chave.
 - Automatizar o jogo viola os termos da Epic e pode banir a conta: avisar quando uma mudança aumentar esse risco.
 
 ## Estado
 
-- 27 testes passando; janela, estados e captura conferidos por print com botões falsos.
+- 31 testes passando; janela, estados e captura conferidos por print com botões falsos.
 - `Farm.exe` gerado e aberto aqui (abre em ~4 s, dados ao lado do exe, fecha sem erro).
 - Ainda não testado no Fortnite de verdade. No primeiro teste, conferir: se o Testar reconhece a
   janela do jogo (classe `UnrealWindow`, título começando com "Fortnite"), se os cliques pegam e se
   o Jogar some da tela depois do clique (senão o farm para após 3 cliques).
+- Próxima fase (pedida pelo Matheus em 2026-11-03): jogar a partida, não só os menus. Plano: ele
+  grava prints com o F9 numa partida normal; daqui sai a leitura da bússola do topo, do círculo da
+  zona no minimapa e do ícone de baú do "Visualizar efeitos sonoros", testada nos prints sem abrir o
+  jogo. Depois: virar a câmera com mouse relativo (ainda não se sabe se o Fortnite aceita) e andar
+  até a zona, e depois ir até o baú e segurar E no aviso. Mirar ou atirar em jogador fica de fora.
+  Já foi avisado: andar pelo mapa sozinho aumenta bastante o risco de ban.

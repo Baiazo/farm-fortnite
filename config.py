@@ -16,6 +16,7 @@ def _pasta_do_programa():
 PASTA = _pasta_do_programa()
 PASTA_BOTOES = os.path.join(PASTA, "botoes")
 PASTA_PRINTS = os.path.join(PASTA, "prints")  # prints salvos quando o farm não reconhece nada
+PASTA_GRAVACAO = os.path.join(PASTA, "gravacao")  # prints do F9, para ensinar o farm a ler a partida
 ARQUIVO_AJUSTES = os.path.join(PASTA, "ajustes.json")
 ARQUIVO_REGISTRO = os.path.join(PASTA, "registro.log")
 
