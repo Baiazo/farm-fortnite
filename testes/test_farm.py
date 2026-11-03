@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -14,7 +15,9 @@ from PIL import Image, ImageDraw
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import automacao  # noqa: E402
+import config  # noqa: E402
 import entrada  # noqa: E402
+import gerar_exe  # noqa: E402
 import visao  # noqa: E402
 from config import Ajustes  # noqa: E402
 
@@ -131,6 +134,12 @@ class TestAjustes(unittest.TestCase):
             Ajustes(limiar=0.85, anti_afk=False).salvar(caminho)
             a = Ajustes.carregar(caminho)
         self.assertEqual((a.limiar, a.anti_afk), (0.85, False))
+
+    def test_dados_ficam_ao_lado_do_exe(self):
+        self.assertEqual(config._pasta_do_programa(), os.path.dirname(os.path.abspath(config.__file__)))
+        exe = os.path.join(tempfile.gettempdir(), "Farm", "Farm.exe")
+        with mock.patch.object(sys, "frozen", True, create=True), mock.patch.object(sys, "executable", exe):
+            self.assertEqual(config._pasta_do_programa(), os.path.dirname(exe))
 
 
 class SistemaFalso:
@@ -304,6 +313,49 @@ class TestEntrada(unittest.TestCase):
         atalho.encerrar()
         atalho.join(2)
         self.assertFalse(atalho.is_alive())
+
+
+def _escrever(caminho, texto=""):
+    os.makedirs(os.path.dirname(caminho), exist_ok=True)
+    with open(caminho, "w", encoding="utf-8") as f:
+        f.write(texto)
+
+
+def _ler(caminho):
+    with open(caminho, encoding="utf-8") as f:
+        return f.read()
+
+
+class TestGerarExe(unittest.TestCase):
+    def _trocar(self, raiz, saida, novo):
+        with mock.patch.object(gerar_exe, "AQUI", raiz), mock.patch.object(gerar_exe, "SAIDA", saida):
+            gerar_exe._trocar_programa(novo)
+
+    def test_gerar_de_novo_mantem_os_dados(self):
+        with tempfile.TemporaryDirectory() as raiz:
+            saida, novo = os.path.join(raiz, "dist", "Farm"), os.path.join(raiz, "novo")
+            _escrever(os.path.join(saida, "Farm.exe"), "velho")
+            _escrever(os.path.join(saida, "_internal", "velho.pyd"))
+            _escrever(os.path.join(saida, "botoes", "jogar.png"), "capturado no exe")
+            _escrever(os.path.join(saida, "ajustes.json"), "{}")
+            _escrever(os.path.join(novo, "Farm.exe"), "novo")
+            _escrever(os.path.join(novo, "_internal", "novo.pyd"))
+            _escrever(os.path.join(raiz, "botoes", "jogar.png"), "capturado no .py")
+            self._trocar(raiz, saida, novo)
+            self.assertEqual(_ler(os.path.join(saida, "Farm.exe")), "novo")
+            self.assertEqual(os.listdir(os.path.join(saida, "_internal")), ["novo.pyd"])
+            self.assertEqual(_ler(os.path.join(saida, "botoes", "jogar.png")), "capturado no exe")
+            self.assertTrue(os.path.exists(os.path.join(saida, "ajustes.json")))
+
+    def test_primeira_vez_copia_os_botoes_do_projeto(self):
+        with tempfile.TemporaryDirectory() as raiz:
+            saida, novo = os.path.join(raiz, "dist", "Farm"), os.path.join(raiz, "novo")
+            _escrever(os.path.join(novo, "Farm.exe"))
+            os.makedirs(os.path.join(novo, "_internal"))
+            _escrever(os.path.join(raiz, "botoes", "jogar.png"), "capturado no .py")
+            self._trocar(raiz, saida, novo)
+            self.assertEqual(_ler(os.path.join(saida, "botoes", "jogar.png")), "capturado no .py")
+            self.assertFalse(os.path.exists(os.path.join(saida, "ajustes.json")))
 
 
 if __name__ == "__main__":

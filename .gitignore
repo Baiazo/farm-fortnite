@@ -8,3 +8,7 @@ prints/
 ajustes.json
 registro.log*
 erro.log
+
+# Exe gerado pelo gerar_exe.bat
+build/
+dist/

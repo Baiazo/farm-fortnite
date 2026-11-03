@@ -108,6 +108,18 @@ def _barra_escura(root):
         pass
 
 
+def desenhar_icone(lado=64):
+    """Play dourado num quadrado arredondado: ícone da janela e, pelo gerar_exe.py, do Farm.exe."""
+    k = lado / 64
+    img = Image.new("RGBA", (lado, lado), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle(
+        (2 * k, 2 * k, 61 * k, 61 * k), radius=14 * k, fill=COR["fundo"], outline=COR["ouro"], width=round(4 * k)
+    )
+    d.polygon([(24 * k, 17 * k), (24 * k, 47 * k), (48 * k, 32 * k)], fill=COR["ouro"])
+    return img
+
+
 def _girar_registro():
     """Começa um registro novo quando passa de 1 MB, guardando o anterior como registro.log.1."""
     try:
@@ -462,8 +474,9 @@ class App:
         self._opcao(g, 5, "Manter esta janela sempre no topo", "sempre_no_topo", self._mudar_topo)
 
     def _montar_rodape(self, pai):
+        abrir = "o Farm.exe" if getattr(sys, "frozen", False) else "o iniciar.bat"
         admin = "Rodando como administrador." if entrada.eh_admin() else (
-            "Sem administrador: se os cliques não pegarem, abra o iniciar.bat como administrador."
+            f"Sem administrador: se os cliques não pegarem, abra {abrir} como administrador."
         )
         ttk.Label(
             pai, text=f"F8 inicia e para de qualquer lugar. {admin}", style="Rodape.TLabel",
@@ -513,11 +526,7 @@ class App:
             self.log_txt.tag_configure(tipo, foreground=cor)
 
     def _icone(self):
-        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-        d = ImageDraw.Draw(img)
-        d.rounded_rectangle((2, 2, 61, 61), radius=14, fill=COR["fundo"], outline=COR["ouro"], width=4)
-        d.polygon([(24, 17), (24, 47), (48, 32)], fill=COR["ouro"])
-        self._icone_img = ImageTk.PhotoImage(img)
+        self._icone_img = ImageTk.PhotoImage(desenhar_icone())
         self.root.iconphoto(True, self._icone_img)
 
     def _numero(self, pai, campo, passo):

@@ -11,8 +11,12 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 
 ## Como rodar
 
-- Abrir: `iniciar.bat` (roda `pythonw farm.py`). Python 3.12 instalado no PC do Matheus.
+- Abrir pelo exe: `gerar_exe.bat` gera `dist\Farm\Farm.exe` (PyInstaller 6, `--onedir`, escolha do
+  Matheus: abre na hora e o antivírus barra menos que o arquivo único). O exe roda sem Python.
+- Abrir pelo código: `iniciar.bat` (roda `pythonw farm.py`). Python 3.12 instalado no PC do Matheus.
 - Testes: `python -m unittest discover -s testes -v`
+- Pelo exe, `config.PASTA` é a pasta do `Farm.exe` (`sys.frozen`): botões, ajustes e registros
+  ficam ao lado dele. Gerar de novo troca só `Farm.exe` e `_internal` e nunca apaga esses dados.
 
 ## Arquitetura
 
@@ -23,12 +27,16 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 | `visao.py` | Correlação normalizada (mesma conta do `TM_CCOEFF_NORMED`) via FFT com numpy, em meia resolução; print preto e prints de travamento |
 | `entrada.py` | `SendInput` com scan codes, F8 por `RegisterHotKey`, janela em foco (título e classe, sem abrir o processo do jogo); DPI real e prioridade abaixo do normal |
 | `config.py` | `BOTOES` (a ordem é a prioridade de clique; `max_cliques` por botão), `Ajustes` salvos em `ajustes.json`, `LIMITES` |
+| `gerar_exe.py` | Chama o PyInstaller (ícone e versão gerados na hora em `build/`) e troca o programa em `dist\Farm\` mantendo os dados |
 
 ## Regras
 
 - Comentários, textos da interface e README em português do Brasil.
-- Dependências: só `numpy` e `Pillow`. Biblioteca nova só com OK do Matheus, antes de baixar.
-- Nada de acesso à rede, leitura de memória do jogo, hook de teclado, código ofuscado ou .exe compilado.
+- Dependências: só `numpy` e `Pillow` (mais o `PyInstaller`, só para gerar o exe). Biblioteca nova
+  só com OK do Matheus, antes de baixar.
+- Nada de acesso à rede, leitura de memória do jogo, hook de teclado ou código ofuscado.
+- O exe só sai do `gerar_exe.bat`, no PC, a partir deste código: nunca baixado pronto, nunca
+  ofuscado e nunca no git (`build/` e `dist/` estão no `.gitignore`).
 - Testes nunca mexem no mouse nem apertam tecla de verdade (o atalho é testado com F24).
 - Não abrir o Fortnite nem clicar na tela do Matheus sem pedir.
 - `botoes/`, `prints/`, `ajustes.json`, `registro.log` e `erro.log` ficam fora do git: são prints do
@@ -38,7 +46,8 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 
 ## Estado
 
-- 24 testes passando; janela, estados e captura conferidos por print com botões falsos.
+- 27 testes passando; janela, estados e captura conferidos por print com botões falsos.
+- `Farm.exe` gerado e aberto aqui (abre em ~4 s, dados ao lado do exe, fecha sem erro).
 - Ainda não testado no Fortnite de verdade. No primeiro teste, conferir: se o Testar reconhece a
   janela do jogo (classe `UnrealWindow`, título começando com "Fortnite"), se os cliques pegam e se
   o Jogar some da tela depois do clique (senão o farm para após 3 cliques).

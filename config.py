@@ -1,9 +1,19 @@
 """Ajustes salvos em disco, caminhos e a lista de botões que o farm reconhece."""
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass, fields
 
-PASTA = os.path.dirname(os.path.abspath(__file__))
+
+def _pasta_do_programa():
+    """Onde ficam botoes/, ajustes.json e os registros. Pelo exe é a pasta do Farm.exe (o código
+    fica escondido na _internal); rodando o .py é a pasta do código."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+PASTA = _pasta_do_programa()
 PASTA_BOTOES = os.path.join(PASTA, "botoes")
 PASTA_PRINTS = os.path.join(PASTA, "prints")  # prints salvos quando o farm não reconhece nada
 ARQUIVO_AJUSTES = os.path.join(PASTA, "ajustes.json")

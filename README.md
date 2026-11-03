@@ -25,14 +25,30 @@ W/A/S/D de vez em quando para o jogo não te expulsar por inatividade.
   você digita.
 - Roda com prioridade abaixo do normal para não pesar no jogo.
 - **Não** lê nem altera a memória do jogo, **não** acessa a internet e **não** precisa de
-  administrador para abrir. Todo o código está aqui, em texto, sem nada compilado ou criptografado.
+  administrador para abrir. Todo o código está aqui, em texto, sem nada criptografado. O
+  `Farm.exe` é gerado no seu PC a partir deste código, pelo `gerar_exe.bat`.
 
-## Requisitos
+## Instalar
 
-- Windows 10 ou 11
-- Python 3.10 ou mais novo ([python.org](https://www.python.org/downloads/), marque
-  "Add python.exe to PATH" na instalação)
-- Bibliotecas `numpy` e `Pillow`:
+Precisa de Windows 10 ou 11. Há dois jeitos de rodar.
+
+### Pelo Farm.exe (sem instalar nada para usar)
+
+1. Rode o `gerar_exe.bat` uma vez. Ele precisa do Python ([python.org](https://www.python.org/downloads/),
+   marque "Add python.exe to PATH") só para gerar o exe e instala sozinho o `numpy`, o `Pillow` e o
+   `PyInstaller` se faltarem. Leva 1 ou 2 minutos.
+2. O programa fica em `dist\Farm\`: abra o **Farm.exe**. Ele roda sem Python e sem biblioteca
+   nenhuma instalada.
+3. Pode mover ou copiar a pasta `Farm` inteira para onde quiser (até para outro PC). O `Farm.exe`
+   precisa da pasta `_internal` ao lado dele. Os botões capturados e os ajustes ficam nessa mesma
+   pasta.
+
+Depois de mudar o código, rode o `gerar_exe.bat` de novo (com o farm fechado): ele troca só o
+programa e mantém os botões, os ajustes e os registros que estão em `dist\Farm\`.
+
+### Pelo código
+
+Com o Python instalado, instale as bibliotecas uma vez e abra o `iniciar.bat`:
 
 ```bash
 pip install -r requirements.txt
@@ -44,7 +60,7 @@ O farm reconhece os botões por imagem, então as imagens têm que sair do **seu
 resolução e no seu idioma (português).
 
 1. No Fortnite, use **Modo de janela: Tela cheia em janela** e deixe o jogo no monitor principal.
-2. Abra o farm com `iniciar.bat`.
+2. Abra o farm (`Farm.exe` ou `iniciar.bat`).
 3. Na lista **1. Imagens dos botões**, clique em **Capturar** ao lado do botão. Você tem 3 s para
    voltar ao jogo com o botão aparecendo na tela.
 4. A tela congela e escurece. Arraste um retângulo **justo em volta do texto do botão** (ex.: só
@@ -53,7 +69,7 @@ resolução e no seu idioma (português).
 6. Use **Testar na tela do jogo (3 s)** para conferir: ele mostra a nota de cada botão ao lado
    dele (verde a partir de 0,80 é encontrado) e diz se reconheceu a janela do Fortnite em foco.
 
-As imagens ficam na pasta `botoes/`. Se mudar a resolução, a escala da interface ou o idioma do
+As imagens ficam na pasta `botoes/`, ao lado do `Farm.exe` (ou do `farm.py`). Se mudar a resolução, a escala da interface ou o idioma do
 jogo, capture de novo.
 
 ## Usar
@@ -67,7 +83,9 @@ jogo, capture de novo.
 
 | Sintoma | O que fazer |
 |---|---|
-| Acha o botão mas o clique não pega | Abra o `iniciar.bat` como administrador (botão direito > Executar como administrador). O Windows bloqueia cliques de programas comuns em janelas com mais permissão. |
+| Acha o botão mas o clique não pega | Abra o `Farm.exe` (ou o `iniciar.bat`) como administrador: botão direito > Executar como administrador. O Windows bloqueia cliques de programas comuns em janelas com mais permissão. |
+| Antivírus bloqueou ou apagou o `Farm.exe` | É falso positivo comum em exe feito com PyInstaller que mexe no mouse. Restaure da quarentena do Windows Defender e libere a pasta `Farm`, ou rode pelo `iniciar.bat`. |
+| "O Windows protegeu o computador" em outro PC | Aparece quando a pasta veio pela internet. Clique em Mais informações > Executar assim mesmo. |
 | Nunca acha o botão | Capture de novo, mais justo no texto. Confira com o Testar. Baixe a precisão para 0,75. |
 | Clica no lugar errado | Suba a precisão para 0,85–0,90 e capture um pedaço com mais desenho. |
 | Print sai preto | Use "Tela cheia em janela" em vez de "Tela cheia". O farm avisa quando isso acontece. |
@@ -78,7 +96,7 @@ jogo, capture de novo.
 
 ## Ajustes
 
-Ficam salvos em `ajustes.json`, na própria pasta.
+Ficam salvos em `ajustes.json`, na pasta do programa (ao lado do `Farm.exe` ou do `farm.py`).
 
 - **Precisão mínima**: nota mínima para considerar que achou o botão (padrão 0,80).
 - **Ler a tela a cada**: intervalo entre os prints (padrão 2 s).
@@ -95,6 +113,7 @@ Ficam salvos em `ajustes.json`, na própria pasta.
 | `visao.py` | Print da tela e busca dos botões (correlação normalizada com numpy) |
 | `entrada.py` | Mouse, teclado e F8 pela API do Windows |
 | `config.py` | Lista de botões e ajustes |
-| `testes/` | Testes da busca, dos ajustes, do laço e do anti-AFK (`python -m unittest discover -s testes`) |
+| `gerar_exe.bat` / `gerar_exe.py` | Geram `dist\Farm\Farm.exe` com o PyInstaller |
+| `testes/` | Testes da busca, dos ajustes, do laço, do anti-AFK e da troca do exe (`python -m unittest discover -s testes`) |
 | `registro.log` | Registro de tudo o que ele fez (o anterior fica em `registro.log.1`) |
 | `prints/` | Prints de quando ele travou (guarda os 20 mais novos) |
