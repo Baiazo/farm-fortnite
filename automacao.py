@@ -7,6 +7,7 @@ import time
 import entrada
 import visao
 from config import BOTOES, PASTA_GRAVACAO, PASTA_PRINTS
+from piloto import Piloto
 
 # Botões que só aparecem depois que a partida acabou
 FIM_DE_PARTIDA = {"voltar", "pular", "continuar"}
@@ -21,6 +22,8 @@ GRAVAR_NO_MAXIMO = 200
 # F10: um print por segundo enquanto você joga; para sozinho depois de uns 5 min
 SEGUIDO_A_CADA = 1.0
 SEGUIDO_NO_MAXIMO = 300
+# Piloto: pausa entre leituras (cada leitura já leva de 200 a 400 ms)
+PASSO_PILOTO = 0.05
 
 # Anti-AFK. Para a frente aparece mais vezes porque é o que um jogador mais faz.
 DIRECOES = (("w",), ("w",), ("w", "a"), ("w", "d"), ("a",), ("d",), ("s",))
@@ -112,11 +115,14 @@ class GravacaoSeguida:
 
 
 class Automacao:
-    def __init__(self, ajustes, modelos, avisar, sistema=None):
+    def __init__(self, ajustes, modelos, avisar, sistema=None, sinais=None):
         self.ajustes = ajustes
         self.modelos = modelos  # chave do botão -> visao.Modelo
         self.avisar = avisar    # avisar(texto, tipo) manda para o registro (chamado de outra thread)
         self.sistema = sistema or Sistema()
+        # com os modelos de sinais/ carregados, o piloto leva o personagem até o marcador e os baús
+        self.piloto = Piloto(sinais, self.sistema, avisar, ajustes) if sinais is not None else None
+        self._partida_nova = threading.Event()  # avisa a thread do piloto para recomeçar
         self.parar = threading.Event()
         self.em_partida = False
         self.situacao = "procurando"  # "procurando", "pausado" (jogo fora de foco) ou "preto"
@@ -143,10 +149,14 @@ class Automacao:
         return not self.parar.is_set() and any(t.is_alive() for t in self._threads)
 
     def iniciar(self):
-        for alvo in (self._laco, self._anti_afk):
+        for alvo in (self._laco, self._anti_afk) + ((self._laco_piloto,) if self.piloto else ()):
             t = threading.Thread(target=alvo, daemon=True)
             t.start()
             self._threads.append(t)
+
+    @property
+    def piloto_no_controle(self):
+        return bool(self.piloto and self.ajustes.piloto and self.piloto.no_controle)
 
     def encerrar(self):
         self.parar.set()
@@ -236,6 +246,7 @@ class Automacao:
             if botao.chave == "jogar":
                 self.partidas += 1
                 self.em_partida = True
+                self._partida_nova.set()
                 self.avisar(f"Partida {self.partidas} iniciada.", "partida")
             return True
         self._tentativas += 1
@@ -284,6 +295,35 @@ class Automacao:
                 "aviso",
             )
 
+    # ---------- piloto ----------
+
+    def _laco_piloto(self):
+        try:
+            while not self.parar.wait(PASSO_PILOTO):
+                try:
+                    self._passo_piloto()
+                except OSError as e:
+                    self.avisar(f"Piloto falhou: {e}", "erro")
+                    self.parar.wait(1)
+        finally:
+            try:
+                self.piloto.largar()
+            except OSError:
+                pass  # o encerrar() ainda solta todas as teclas
+
+    def _passo_piloto(self):
+        """Uma leitura do piloto, só na partida e com o jogo em foco; fora disso solta as teclas."""
+        if self._partida_nova.is_set():
+            self._partida_nova.clear()
+            self.piloto.reiniciar()
+        if not (self.ajustes.piloto and self.em_partida and self._foco_ok()) or self.piloto.fase == "fim":
+            self.piloto.largar()
+            self.parar.wait(0.5)
+            return
+        img = self.sistema.capturar_tela()
+        if not visao.tela_preta(img):
+            self.piloto.passo(img)
+
     # ---------- anti-AFK ----------
 
     def _anti_afk(self):
@@ -303,7 +343,8 @@ class Automacao:
         """Mexe o personagem de tempos em tempos, só na partida e com o jogo em foco: anda numa
         direção sorteada e, com a opção ligada, às vezes pula ou vira a câmera no caminho."""
         agora = self.sistema.agora()
-        ativo = self.ajustes.anti_afk and self.em_partida and not self.parar.is_set() and self._foco_ok()
+        ativo = (self.ajustes.anti_afk and self.em_partida and not self.parar.is_set() and self._foco_ok()
+                 and not self.piloto_no_controle)
         if self._mexendo_ate is not None:
             if not ativo or agora >= self._mexendo_ate:
                 self._proximo_afk = agora + _sortear(self.ajustes.afk_a_cada)
@@ -321,7 +362,8 @@ class Automacao:
         duracao = _sortear(self.ajustes.afk_segurar)
         self._mexendo_ate = agora + duracao  # marcado antes de apertar: se falhar, só perde esta vez
         if self.ajustes.afk_variado:
-            if random.random() < CHANCE_PULO:
+            # com o piloto ligado quem pula é ele: um pulo do anti-AFK no ônibus salta antes da hora
+            if random.random() < CHANCE_PULO and not (self.piloto and self.ajustes.piloto):
                 self._pulo_em = agora + random.uniform(0, duracao * 0.7)
             if random.random() < CHANCE_VIRAR:
                 self._virar = random.choice((-1, 1)) * random.randint(*VIRAR)
@@ -354,6 +396,8 @@ class Automacao:
         presas, self._presas = self._presas, []
         erro = None
         for tecla in presas:
+            if self.piloto and tecla in self.piloto._presas:
+                continue  # o piloto assumiu e está segurando a mesma tecla (o W)
             try:
                 self.sistema.soltar(tecla)
             except OSError as e:

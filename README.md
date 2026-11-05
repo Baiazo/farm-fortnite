@@ -110,6 +110,27 @@ print a cada 15 s (dá para mudar) enquanto está na partida, com nome `auto-...
 F9 (`partida-...png`). Cada print tem uns 3 MB em 1080p, então ele para depois de 200 prints
 (uns 600 MB) e avisa no registro. Para gravar mais, pare e inicie o farm de novo.
 
+## Piloto: cair no marcador e vasculhar baús (em teste)
+
+> **Aviso:** com o piloto ligado o programa joga a partida sozinho (pula do ônibus, anda, abre
+> baú). Isso aumenta bastante a chance de a conta ser suspensa. Ele nunca mira nem atira.
+
+1. Marque **Piloto: cair no marcador e vasculhar baús**, escolha quantos baús por partida e a
+   **tecla de interagir** igual à dos controles do seu Fortnite (o padrão do jogo é E).
+2. Em cada partida, antes de o ônibus sair, abra o mapa (M) e ponha o marcador onde quer cair, de
+   preferência em cima de onde ficam os baús. Por enquanto o marcador é com você.
+3. Deixe ligado "Visualizar efeitos sonoros" nas opções de áudio do Fortnite: o piloto acha os
+   baús pelo ícone que aparece em volta da mira.
+
+O que ele faz: no ônibus, acompanha a distância até o marcador e pula quando ela para de cair;
+na queda, segura W e vira a câmera até o pino ficar no meio da tela; perto do marcador, vira para
+o ícone de baú, anda até aparecer "VASCULHAR" e segura a tecla de interagir. Depois de abrir os
+baús (ou em 2 min), devolve a partida para o anti-AFK. Sem marcador, ele desiste no ônibus e
+avisa no registro.
+
+Ele lê a tela com modelos recortados dos prints do seu jogo, que ficam em `sinais/`. Se a pasta
+não existir, o piloto fica desligado e o registro avisa.
+
 ## Problemas comuns
 
 | Sintoma | O que fazer |
@@ -148,6 +169,8 @@ Ficam salvos em `ajustes.json`, na pasta do programa (ao lado do `Farm.exe` ou d
 | `farm.py` | Janela e fluxo de captura |
 | `automacao.py` | Laço que lê a tela, clica e faz o anti-AFK |
 | `visao.py` | Print da tela e busca dos botões (correlação normalizada com numpy) |
+| `leitura.py` | Leitura da partida: marcador e distância, ícone de baú em volta da mira, avisos "PARA PULAR" e "VASCULHAR" |
+| `piloto.py` | Piloto: do ônibus até os baús, usando a leitura |
 | `entrada.py` | Mouse, teclado e F8 pela API do Windows |
 | `config.py` | Lista de botões e ajustes |
 | `gerar_exe.bat` / `gerar_exe.py` | Geram `dist\Farm\Farm.exe` com o PyInstaller |
@@ -155,3 +178,4 @@ Ficam salvos em `ajustes.json`, na pasta do programa (ao lado do `Farm.exe` ou d
 | `registro.log` | Registro de tudo o que ele fez (o anterior fica em `registro.log.1`) |
 | `prints/` | Prints de quando ele travou (guarda os 20 mais novos) |
 | `gravacao/` | Prints do F9, do F10 e da gravação automática (nunca apaga) |
+| `sinais/` | Modelos da leitura da partida, recortados dos seus prints (fora do git) |

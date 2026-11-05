@@ -372,6 +372,57 @@ class TestAutomacao(unittest.TestCase):
         self._afk(60)
         self.assertEqual(len(self.sistema.teclas), antes)
 
+    def _com_piloto(self):
+        class Sinais:  # só o aviso do ônibus, sempre na tela
+            def aviso(self, img, nome):
+                return nome == "pular"
+
+            def marcador(self, img):
+                return None
+
+            def baus(self, img):
+                return []
+
+        self.farm = automacao.Automacao(
+            Ajustes(piloto=True), {}, lambda texto, tipo="info": self.avisos.append((tipo, texto)), self.sistema,
+            sinais=Sinais(),
+        )
+
+    def test_piloto_assume_no_onibus_e_o_anti_afk_para(self):
+        self._com_piloto()
+        self.farm.em_partida = True
+        self.farm._partida_nova.set()
+        self.farm._passo_piloto()
+        self.assertEqual(self.farm.piloto.fase, "onibus")
+        self.assertTrue(self.farm.piloto_no_controle)
+        self._afk(30)
+        self.assertEqual(self.sistema.teclas, [])  # o anti-AFK não mexe enquanto o piloto está no controle
+
+    def test_partida_nova_recomeca_o_piloto(self):
+        self._com_piloto()
+        self.farm.piloto.fase = "fim"
+        self._tela(jogar=_visivel())
+        self._tela(jogar=_sumiu())  # o Jogar sumiu: partida nova
+        self.farm._passo_piloto()
+        self.assertEqual(self.farm.piloto.fase, "onibus")
+
+    def test_com_piloto_o_anti_afk_nao_pula(self):
+        self._com_piloto()
+        self.farm.em_partida = True
+        self.farm.piloto.fase = "fim"  # fora do controle do piloto: o anti-AFK anda
+        with mock.patch.object(automacao.random, "random", return_value=0.0):
+            self._afk(self.farm.ajustes.afk_a_cada + 0.2 + self.farm.ajustes.afk_segurar + 0.2)
+        self.assertTrue(self._apertadas())
+        self.assertNotIn("espaco", self._apertadas())  # pular no ônibus é com o piloto
+
+    def test_piloto_desligado_nos_ajustes_nao_mexe(self):
+        self._com_piloto()
+        self.farm.ajustes.piloto = False
+        self.farm.em_partida = True
+        with mock.patch.object(self.farm.parar, "wait"):
+            self.farm._passo_piloto()
+        self.assertEqual(self.farm.piloto.fase, "esperando")
+
     def test_grava_prints_so_na_partida(self):
         a = self.farm.ajustes
         a.gravar_partida = True

@@ -25,9 +25,11 @@ except ImportError:
     sys.exit(1)
 
 import entrada
+import leitura
 import visao
 from automacao import Automacao, GravacaoSeguida
-from config import ARQUIVO_REGISTRO, BOTOES, LIMITES, PASTA, PASTA_BOTOES, PASTA_GRAVACAO, Ajustes, caminho_botao
+from config import (ARQUIVO_REGISTRO, BOTOES, LIMITES, OPCOES, PASTA, PASTA_BOTOES, PASTA_GRAVACAO, Ajustes,
+                    caminho_botao)
 
 TITULO = "Farm Automático"
 
@@ -58,6 +60,13 @@ ESTADOS = {
     "partida": ("NA PARTIDA", COR["verde"]),
     "pausado": ("PAUSADO", COR["laranja"]),
     "preto": ("PRINT PRETO", COR["vermelho"]),
+}
+# Frase do topo enquanto o piloto está com o personagem
+FASES_PILOTO = {
+    "onibus": "Piloto no ônibus, esperando a hora de pular",
+    "queda": "Piloto caindo até o marcador",
+    "a_pe": "Piloto indo a pé até o marcador",
+    "baus": "Piloto procurando baús",
 }
 
 # Cor de cada tipo de linha do registro ("info" fica na cor do texto)
@@ -268,9 +277,9 @@ class App:
         self.root.configure(bg=COR["fundo"])
         self.root.report_callback_exception = self._erro_interface
         self.escala = self.root.winfo_fpixels("1i") / 96
-        alt = min(self._px(700), self.root.winfo_screenheight() - self._px(80))
+        alt = min(self._px(750), self.root.winfo_screenheight() - self._px(80))
         self.root.geometry(f"{self._px(880)}x{alt}")
-        self.root.minsize(self._px(800), min(self._px(660), alt))
+        self.root.minsize(self._px(800), min(self._px(710), alt))
         self.root.attributes("-topmost", self.ajustes.sempre_no_topo)
         self.root.protocol("WM_DELETE_WINDOW", self.sair)
         self.fontes = _fontes(self.root)
@@ -342,6 +351,20 @@ class App:
             "TSpinbox", fieldbackground=COR["campo"], background=COR["botao"], foreground=COR["texto"],
             arrowcolor=COR["texto"], bordercolor=COR["borda"], lightcolor=COR["campo"], darkcolor=COR["campo"],
         )
+        e.configure(
+            "TCombobox", fieldbackground=COR["campo"], background=COR["botao"], foreground=COR["texto"],
+            arrowcolor=COR["texto"], bordercolor=COR["borda"], lightcolor=COR["campo"], darkcolor=COR["campo"],
+        )
+        # somente leitura, o Tk pinta o campo de branco: força as cores do tema
+        e.map(
+            "TCombobox", fieldbackground=[("readonly", COR["campo"])], foreground=[("readonly", COR["texto"])],
+            selectbackground=[("readonly", COR["campo"])], selectforeground=[("readonly", COR["texto"])],
+            background=[("active", COR["botao_hover"]), ("readonly", COR["botao"])],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", COR["campo"])
+        self.root.option_add("*TCombobox*Listbox.foreground", COR["texto"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", COR["borda"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", COR["texto"])
         e.configure("Ouro.Horizontal.TScale", background=COR["cartao"])
         e.configure(
             "Vertical.TScrollbar", background=COR["botao"], troughcolor=COR["campo"], bordercolor=COR["campo"],
@@ -483,7 +506,13 @@ class App:
         ttk.Label(gravar, text="um a cada", style="CartaoSuave.TLabel").pack(side="left")
         self._numero(gravar, "gravar_a_cada", 5).pack(side="left", padx=px(6))
         ttk.Label(gravar, text="s", style="CartaoSuave.TLabel").pack(side="left")
-        self._opcao(g, 8, "Manter esta janela sempre no topo", "sempre_no_topo", self._mudar_topo)
+        self._opcao(g, 8, "Piloto: cair no marcador e vasculhar baús", "piloto")
+        baus = ttk.Frame(g, style="Cartao.TFrame")
+        baus.grid(row=9, column=0, columnspan=3, sticky="w", padx=(px(24), 0), pady=(px(4), 0))
+        self._numero(baus, "baus_por_partida", 1).pack(side="left")
+        ttk.Label(baus, text="baús; tecla de interagir", style="CartaoSuave.TLabel").pack(side="left", padx=px(6))
+        self._escolha(baus, "tecla_interagir").pack(side="left")
+        self._opcao(g, 10, "Manter esta janela sempre no topo", "sempre_no_topo", self._mudar_topo)
 
     def _montar_rodape(self, pai):
         abrir = "o Farm.exe" if getattr(sys, "frozen", False) else "o iniciar.bat"
@@ -562,6 +591,22 @@ class App:
         var.trace_add("write", mudou)
         return ttk.Spinbox(
             pai, from_=menor, to=maior, increment=passo, width=5, textvariable=var, font=(self.fontes["corpo"], 10)
+        )
+
+    def _escolha(self, pai, campo):
+        """Lista de valores fixos (OPCOES) ligada a um ajuste de texto; mostra em maiúsculas."""
+        var = tk.StringVar(value=getattr(self.ajustes, campo).upper())
+        self._vars.append(var)
+
+        def mudou(*_):
+            valor = var.get().lower()
+            if valor in OPCOES[campo]:
+                setattr(self.ajustes, campo, valor)
+
+        var.trace_add("write", mudou)
+        return ttk.Combobox(
+            pai, values=[v.upper() for v in OPCOES[campo]], textvariable=var, state="readonly", width=3,
+            font=(self.fontes["corpo"], 10),
         )
 
     def _opcao(self, pai, linha, texto, campo, depois=None, recuo=0):
@@ -682,9 +727,19 @@ class App:
         if faltam:
             self.log("Sem imagem, serão ignorados: " + ", ".join(faltam))
         self._salvar_ajustes()
-        self.automacao = Automacao(self.ajustes, modelos, lambda texto, tipo="info": self.fila.put(("log", (texto, tipo))))
+        sinais = None
+        if self.ajustes.piloto:
+            try:
+                sinais = leitura.Sinais()
+            except (OSError, ValueError) as e:
+                self.log(f"Piloto desligado: faltam os modelos em sinais ({e}).", "aviso")
+        self.automacao = Automacao(
+            self.ajustes, modelos, lambda texto, tipo="info": self.fila.put(("log", (texto, tipo))), sinais=sinais
+        )
         self.automacao.iniciar()
         self.log("Iniciado. Deixe o Fortnite aberto no saguão.")
+        if sinais:
+            self.log("Piloto ligado: ponha o marcador no mapa antes de o ônibus sair.")
 
     def parar(self):
         a = self.automacao
@@ -848,6 +903,12 @@ class App:
             return "pausado", "O Fortnite saiu do primeiro plano. Volte para o jogo para continuar."
         if a.situacao == "preto":
             return "preto", "O jogo não aparece no print. No Fortnite, use “Tela cheia em janela”."
+        if a.piloto_no_controle:
+            p = a.piloto
+            detalhe = FASES_PILOTO[p.fase] + (f", a {p.distancia} m do marcador." if p.distancia is not None else ".")
+            if p.fase == "baus":
+                detalhe = f"{FASES_PILOTO['baus']}: {p.abertos} vasculhados."
+            return "partida", detalhe
         if a.em_partida:
             detalhe = "Anti-AFK ligado." if self.ajustes.anti_afk else "Anti-AFK desligado."
             if self.ajustes.gravar_partida:

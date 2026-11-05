@@ -6,6 +6,7 @@ __pycache__/
 botoes/
 prints/
 gravacao/
+sinais/
 ajustes.json
 registro.log*
 erro.log

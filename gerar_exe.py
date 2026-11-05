@@ -16,7 +16,7 @@ VERSAO = (1, 0, 0)
 # usuário e nunca é apagado.
 PROGRAMA = (f"{NOME}.exe", "_internal")
 # Copiados do projeto na primeira vez, para não precisar capturar os botões de novo
-DADOS_INICIAIS = ("botoes", "ajustes.json")
+DADOS_INICIAIS = ("botoes", "sinais", "ajustes.json")
 
 INFO_VERSAO = """\
 VSVersionInfo(

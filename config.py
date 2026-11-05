@@ -17,6 +17,7 @@ PASTA = _pasta_do_programa()
 PASTA_BOTOES = os.path.join(PASTA, "botoes")
 PASTA_PRINTS = os.path.join(PASTA, "prints")  # prints salvos quando o farm não reconhece nada
 PASTA_GRAVACAO = os.path.join(PASTA, "gravacao")  # prints do F9, para ensinar o farm a ler a partida
+PASTA_SINAIS = os.path.join(PASTA, "sinais")  # modelos do pino, dos números e dos avisos da partida
 ARQUIVO_AJUSTES = os.path.join(PASTA, "ajustes.json")
 ARQUIVO_REGISTRO = os.path.join(PASTA, "registro.log")
 
@@ -50,6 +51,11 @@ LIMITES = {
     "afk_a_cada": (1.0, 600.0),
     "afk_segurar": (0.5, 30.0),
     "gravar_a_cada": (5.0, 600.0),
+    "baus_por_partida": (1.0, 10.0),
+}
+# Ajustes de texto: valores aceitos (o primeiro é o padrão)
+OPCOES = {
+    "tecla_interagir": ("e", "x", "f"),
 }
 
 
@@ -74,6 +80,9 @@ class Ajustes:
     afk_segurar: float = 2.0    # duração de cada movimento (também sorteada)
     gravar_partida: bool = False  # salvar sozinho prints da partida em gravacao/
     gravar_a_cada: float = 15.0
+    piloto: bool = False        # cair no marcador do mapa e vasculhar baús (piloto.py)
+    baus_por_partida: float = 3.0
+    tecla_interagir: str = "e"  # a tecla de "Interagir" nos controles do Fortnite
     sempre_no_topo: bool = False
 
     @classmethod
@@ -92,6 +101,9 @@ class Ajustes:
             if campo.name in LIMITES:
                 if isinstance(v, (int, float)) and not isinstance(v, bool):
                     valores[campo.name] = limitar(campo.name, v)
+            elif campo.name in OPCOES:
+                if v in OPCOES[campo.name]:
+                    valores[campo.name] = v
             elif isinstance(v, bool):
                 valores[campo.name] = v
         return cls(**valores)

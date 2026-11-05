@@ -48,11 +48,13 @@ def salvar_gravacao(img, pasta, prefixo="partida"):
     return caminho
 
 
-def _preparar(img):
-    """Cinza, reduzido pela ESCALA, em float64."""
+def _preparar(img, escala=ESCALA):
+    """Cinza, reduzido pela escala, em float64."""
     cinza = img.convert("L")
+    if escala == 1:
+        return np.asarray(cinza, dtype=np.float64)
     larg, alt = cinza.size
-    tamanho = (max(1, round(larg * ESCALA)), max(1, round(alt * ESCALA)))
+    tamanho = (max(1, round(larg * escala)), max(1, round(alt * escala)))
     return np.asarray(cinza.resize(tamanho, Image.BOX), dtype=np.float64)
 
 
@@ -68,10 +70,11 @@ def _soma_janelas(ii, h, w):
 
 
 class Modelo:
-    """Imagem de um botão pronta para busca."""
+    """Imagem de um botão pronta para busca. Ícones e textos pequenos do jogo usam escala 1
+    (resolução cheia), e aí o Quadro tem que usar a mesma escala."""
 
-    def __init__(self, img):
-        t = _preparar(img)
+    def __init__(self, img, escala=ESCALA):
+        t = _preparar(img, escala)
         self.altura, self.largura = t.shape
         self.centrado = t - t.mean()
         self.norma = float(np.sqrt((self.centrado ** 2).sum()))
@@ -86,28 +89,30 @@ class Modelo:
         return self._fft[forma]
 
 
-def carregar_modelo(caminho):
+def carregar_modelo(caminho, escala=ESCALA):
     with Image.open(caminho) as img:
-        return Modelo(img)
+        return Modelo(img, escala)
 
 
 class Quadro:
     """Tela preparada uma vez e reaproveitada na busca de todos os botões."""
 
-    def __init__(self, img):
-        dados = _preparar(img)
+    def __init__(self, img, escala=ESCALA):
+        dados = _preparar(img, escala)
+        self.escala = escala
         self.forma = dados.shape
         self.fft = np.fft.rfft2(dados)
         self.soma = _integral(dados)
         self.soma2 = _integral(dados ** 2)
 
 
-def procurar(quadro, modelo):
-    """Melhor encaixe do botão na tela: (nota, x, y), com x/y no centro, em pixels da tela."""
+def mapa_de_notas(quadro, modelo):
+    """Nota de cada posição do canto do molde no quadro (em pixels do quadro), ou None se o molde
+    não cabe."""
     H, W = quadro.forma
     h, w = modelo.altura, modelo.largura
     if h > H or w > W:
-        return 0.0, 0, 0
+        return None
     # correlação circular; nas posições válidas o molde não dá a volta na borda
     corr = np.fft.irfft2(quadro.fft * modelo.fft(quadro.forma), s=quadro.forma)[: H - h + 1, : W - w + 1]
     n = h * w
@@ -117,9 +122,35 @@ def procurar(quadro, modelo):
     # região lisa da tela não tem como bater com o botão e daria divisão instável
     ok = var > n
     nota[ok] = corr[ok] / (modelo.norma * np.sqrt(var[ok]))
+    return np.clip(nota, -1.0, 1.0)
+
+
+def procurar(quadro, modelo):
+    """Melhor encaixe do botão na tela: (nota, x, y), com x/y no centro, em pixels da tela."""
+    nota = mapa_de_notas(quadro, modelo)
+    if nota is None:
+        return 0.0, 0, 0
     y, x = np.unravel_index(int(np.argmax(nota)), nota.shape)
-    melhor = float(np.clip(nota[y, x], -1.0, 1.0))
-    return melhor, round((x + w / 2) / ESCALA), round((y + h / 2) / ESCALA)
+    e = quadro.escala
+    return float(nota[y, x]), round((x + modelo.largura / 2) / e), round((y + modelo.altura / 2) / e)
+
+
+def procurar_varios(quadro, modelo, limiar, maximo=4):
+    """Todos os encaixes com nota >= limiar (até `maximo`), do melhor para o pior, sem repetir o
+    mesmo lugar: lista de (nota, x, y) como no procurar."""
+    nota = mapa_de_notas(quadro, modelo)
+    if nota is None:
+        return []
+    nota = nota.copy()
+    h, w, e = modelo.altura, modelo.largura, quadro.escala
+    achados = []
+    while len(achados) < maximo:
+        y, x = np.unravel_index(int(np.argmax(nota)), nota.shape)
+        if nota[y, x] < limiar:
+            break
+        achados.append((float(nota[y, x]), round((x + w / 2) / e), round((y + h / 2) / e)))
+        nota[max(0, y - h):y + h, max(0, x - w):x + w] = -1.0  # some com a vizinhança deste encaixe
+    return achados
 
 
 def recortar(img, x0, y0, x1, y1):
