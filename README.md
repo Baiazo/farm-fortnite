@@ -1,8 +1,8 @@
 # Farm Automático — Fortnite
 
 Programa em português que joga partidas em sequência sozinho: clica em **Jogar**, nos pop-ups,
-em **Pular** e em **Voltar ao saguão**, e começa de novo. Durante a partida ele pode segurar
-W/A/S/D de vez em quando para o jogo não te expulsar por inatividade.
+em **Pular** e em **Voltar ao saguão**, e começa de novo. Durante a partida ele anda com W/A/S/D,
+pula e vira a câmera de vez em quando para o jogo não te expulsar por inatividade.
 
 > **Aviso:** automatizar o jogo vai contra os termos de uso do Fortnite e a conta pode ser
 > suspensa. Use por sua conta e risco.
@@ -13,16 +13,16 @@ W/A/S/D de vez em quando para o jogo não te expulsar por inatividade.
   capturou do seu jogo.
 - Clica pelo `SendInput` do Windows, o mesmo caminho de um mouse de verdade, e devolve o cursor
   para onde estava.
-- Só clica e só aperta W/A/S/D com o Fortnite em primeiro plano. Se você trocar de janela, ele
-  pausa sozinho e volta quando o jogo voltar para a frente: o anti-AFK nunca digita no navegador
-  nem no WhatsApp.
+- Só clica, aperta tecla e mexe o mouse com o Fortnite em primeiro plano. Se você trocar de
+  janela, ele pausa sozinho e volta quando o jogo voltar para a frente: o anti-AFK nunca digita no
+  navegador nem no WhatsApp.
 - Confere cada clique: a partida só conta quando o Jogar some da tela. Se o mesmo botão continuar
   lá depois de 3 cliques (10 nos pop-ups, que às vezes vêm vários seguidos), ele para e avisa.
 - Se passar 10 min sem reconhecer nenhum botão (35 min durante a partida), salva um print em
   `prints/` para você ver qual tela travou e capturar o botão que falta.
 - Guarda o registro em `registro.log`, para conferir depois o que aconteceu numa sessão longa.
-- F8 e F9 são registrados no sistema com `RegisterHotKey`: não existe hook de teclado, ele não lê
-  o que você digita.
+- F8, F9 e F10 são registrados no sistema com `RegisterHotKey`: não existe hook de teclado, ele
+  não lê o que você digita.
 - Roda com prioridade abaixo do normal para não pesar no jogo.
 - **Não** lê nem altera a memória do jogo, **não** acessa a internet e **não** precisa de
   administrador para abrir. Todo o código está aqui, em texto, sem nada criptografado. O
@@ -96,6 +96,20 @@ O que vale gravar, cada um algumas vezes e em lugares diferentes do mapa:
 
 Com o farm aberto, o F9 é dele: o jogo não recebe essa tecla. A pasta nunca é limpa sozinha.
 
+### Gravar um print por segundo (F10)
+
+Para momentos rápidos, como a queda do ônibus, aperte **F10** uma vez: ele grava um print por
+segundo (`seguido-...png`) até você apertar F10 de novo, ou sozinho depois de 300 prints (uns 5
+min). Dá um bipe ao ligar e outro ao desligar. Só grava com o Fortnite em primeiro plano, não
+aperta nada e não lê o que você digita. Também não precisa iniciar o farm.
+
+### Gravar sozinho enquanto o farm joga
+
+Marque **Gravar prints da partida em gravacao** nos ajustes. Com o farm rodando, ele salva um
+print a cada 15 s (dá para mudar) enquanto está na partida, com nome `auto-...png`, ao lado dos do
+F9 (`partida-...png`). Cada print tem uns 3 MB em 1080p, então ele para depois de 200 prints
+(uns 600 MB) e avisa no registro. Para gravar mais, pare e inicie o farm de novo.
+
 ## Problemas comuns
 
 | Sintoma | O que fazer |
@@ -110,7 +124,7 @@ Com o farm aberto, o F9 é dele: o jogo não recebe essa tecla. A pasta nunca é
 | Parou sozinho: "cliquei 3 vezes" | O jogo não aceitou o clique. Abra como administrador. Se o botão aceita o clique mas continua igual na tela, capture outro pedaço dele. |
 | Apareceu print em `prints/` | Ele ficou 10 min sem reconhecer nada. Abra o print, veja qual botão estava na tela e capture. |
 | F8 não funciona | Outro programa já usa F8; use o botão Iniciar/Parar. |
-| F9 não dá bipe | Veja o registro: outro programa pode estar usando o F9, ou o som do Windows está mudo (o print é salvo do mesmo jeito). |
+| F9 ou F10 não dá bipe | Veja o registro: outro programa pode estar usando a tecla, ou o som do Windows está mudo (o print é salvo do mesmo jeito). |
 
 ## Ajustes
 
@@ -120,7 +134,12 @@ Ficam salvos em `ajustes.json`, na pasta do programa (ao lado do `Farm.exe` ou d
 - **Ler a tela a cada**: intervalo entre os prints (padrão 2 s).
 - **Pausar quando o Fortnite sair do primeiro plano**: ligado por padrão. Desligue só se ele não
   reconhecer a janela do jogo.
-- **Anti-AFK**: segura uma tecla W/A/S/D aleatória por 3 s a cada 10 s, só durante a partida.
+- **Anti-AFK**: só durante a partida, anda para um lado sorteado (para a frente na maioria das
+  vezes, às vezes na diagonal, para o lado ou para trás) por uns 2 s e para por uns 2 s. Os dois
+  tempos são sorteados em volta do que você escolher, para não ter um ritmo fixo.
+- **Pular e virar a câmera também**: no meio de alguns movimentos ele dá um pulo ou vira a câmera
+  com o mouse para um lado. O quanto vira depende da sensibilidade do mouse no jogo.
+- **Gravar prints da partida**: desligado por padrão. Veja "Gravar sozinho enquanto o farm joga".
 
 ## Arquivos
 
@@ -135,4 +154,4 @@ Ficam salvos em `ajustes.json`, na pasta do programa (ao lado do `Farm.exe` ou d
 | `testes/` | Testes da busca, dos ajustes, do laço, do anti-AFK e da troca do exe (`python -m unittest discover -s testes`) |
 | `registro.log` | Registro de tudo o que ele fez (o anterior fica em `registro.log.1`) |
 | `prints/` | Prints de quando ele travou (guarda os 20 mais novos) |
-| `gravacao/` | Prints que você salvou com o F9 (nunca apaga) |
+| `gravacao/` | Prints do F9, do F10 e da gravação automática (nunca apaga) |

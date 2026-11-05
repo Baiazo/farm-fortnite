@@ -6,7 +6,7 @@ import time
 
 import entrada
 import visao
-from config import BOTOES, PASTA_PRINTS
+from config import BOTOES, PASTA_GRAVACAO, PASTA_PRINTS
 
 # Botões que só aparecem depois que a partida acabou
 FIM_DE_PARTIDA = {"voltar", "pular", "continuar"}
@@ -16,6 +16,21 @@ PRETAS_PARA_AVISAR = 5
 # passar muito tempo sem botão, então o limite é maior.
 TRAVADO_FORA = 10 * 60
 TRAVADO_NA_PARTIDA = 35 * 60
+# Gravação automática: prints por vez que o farm é iniciado (cada um tem uns 3 MB em 1080p)
+GRAVAR_NO_MAXIMO = 200
+# F10: um print por segundo enquanto você joga; para sozinho depois de uns 5 min
+SEGUIDO_A_CADA = 1.0
+SEGUIDO_NO_MAXIMO = 300
+
+# Anti-AFK. Para a frente aparece mais vezes porque é o que um jogador mais faz.
+DIRECOES = (("w",), ("w",), ("w", "a"), ("w", "d"), ("a",), ("d",), ("s",))
+VARIACAO = (0.6, 1.4)  # tempos sorteados em volta do ajuste, para não repetir um ritmo fixo
+CHANCE_PULO = 0.35
+CHANCE_VIRAR = 0.5
+# Quanto a câmera vira, em unidades do mouse (quantos graus dá depende da sensibilidade do jogo).
+# A virada é dividida em passos de 0,1 s para não ser um tranco.
+VIRAR = (300, 1500)
+PASSOS_VIRAR = 6
 
 
 class Sistema:
@@ -31,10 +46,69 @@ class Sistema:
     apertar = staticmethod(entrada.apertar)
     soltar = staticmethod(entrada.soltar)
     soltar_tudo = staticmethod(entrada.soltar_tudo)
+    virar = staticmethod(entrada.virar)
 
     @staticmethod
     def salvar_print(img):
         return visao.salvar_print(img, PASTA_PRINTS)
+
+    @staticmethod
+    def salvar_gravacao(img):
+        return visao.salvar_gravacao(img, PASTA_GRAVACAO, "auto")
+
+    @staticmethod
+    def salvar_seguido(img):
+        return visao.salvar_gravacao(img, PASTA_GRAVACAO, "seguido")
+
+
+class GravacaoSeguida:
+    """F10: um print por segundo em gravacao/ enquanto você joga, até apertar de novo ou chegar
+    ao limite. Não aperta nada e não lê teclado; só grava com o Fortnite em primeiro plano, então
+    nunca tira print de outra janela."""
+
+    def __init__(self, avisar, sistema=None):
+        self.avisar = avisar  # chamado de outra thread
+        self.sistema = sistema or Sistema()
+        self.parar = threading.Event()
+        self.gravados = 0
+        self._thread = None
+
+    @property
+    def rodando(self):
+        return self._thread is not None and self._thread.is_alive() and not self.parar.is_set()
+
+    def alternar(self):
+        """Liga ou desliga. Devolve True quando ligou."""
+        if self.rodando:
+            self.parar.set()
+            return False
+        self.parar = threading.Event()  # um evento novo: a thread antiga, se ainda não saiu, continua parada
+        self.gravados = 0
+        self._thread = threading.Thread(target=self._laco, args=(self.parar,), daemon=True)
+        self._thread.start()
+        return True
+
+    def _laco(self, parar):
+        while not parar.is_set():
+            inicio = time.monotonic()
+            try:
+                self.passo()
+            except OSError as e:
+                self.avisar(f"F10: não consegui salvar o print ({e}).", "erro")
+            parar.wait(max(0.1, SEGUIDO_A_CADA - (time.monotonic() - inicio)))
+        self.avisar(f"F10: gravação parada, {self.gravados} prints em gravacao (seguido-...png).", "ok")
+
+    def passo(self):
+        if self.gravados >= SEGUIDO_NO_MAXIMO:
+            self.parar.set()
+            return
+        if not self.sistema.jogo_em_foco():
+            return
+        img = self.sistema.capturar_tela()
+        if visao.tela_preta(img):
+            return
+        self.sistema.salvar_seguido(img)
+        self.gravados += 1
 
 
 class Automacao:
@@ -54,8 +128,13 @@ class Automacao:
         self._tentativas = 0    # prints seguidos em que ele continuou lá
         self._pretas = 0
         self._visto_em = self.inicio  # última vez que algum botão apareceu
-        self._tecla = None      # tecla que o anti-AFK está segurando
-        self._soltar_em = 0.0
+        self.gravados = 0       # prints da gravação automática nesta vez
+        self._proxima_gravacao = 0.0
+        self._presas = []       # teclas que o anti-AFK está segurando
+        self._mexendo_ate = None  # fim do movimento atual do anti-AFK
+        self._pulo_em = None    # quando pular no meio do movimento
+        self._virar = 0         # quanto ainda falta virar a câmera
+        self._passo_virar = 0
         self._proximo_afk = 0.0
         self._threads = []
 
@@ -116,6 +195,7 @@ class Automacao:
 
         quadro = visao.Quadro(img)
         self.processar({chave: visao.procurar(quadro, m) for chave, m in self.modelos.items()}, img)
+        self._gravar_partida(img)
 
     def processar(self, notas, img=None):
         """Age sobre as notas da tela atual ({chave: (nota, x, y)}): confere se o último clique
@@ -181,6 +261,29 @@ class Automacao:
             "aviso",
         )
 
+    def _gravar_partida(self, img):
+        """Com a opção ligada, guarda um print da partida de tempos em tempos em gravacao/:
+        o mesmo material do F9, sem precisar apertar nada."""
+        agora = self.sistema.agora()
+        if not (self.ajustes.gravar_partida and self.em_partida):
+            self._proxima_gravacao = agora + self.ajustes.gravar_a_cada  # conta a partir do início da partida
+            return
+        if agora < self._proxima_gravacao or self.gravados >= GRAVAR_NO_MAXIMO:
+            return
+        self._proxima_gravacao = agora + self.ajustes.gravar_a_cada
+        try:
+            self.sistema.salvar_gravacao(img)
+        except OSError as e:
+            self.avisar(f"Não consegui salvar o print da partida: {e}", "erro")
+            return
+        self.gravados += 1
+        if self.gravados == GRAVAR_NO_MAXIMO:
+            self.avisar(
+                f"Gravação parada: {GRAVAR_NO_MAXIMO} prints desta vez já estão em gravacao. "
+                "Para gravar mais, pare e inicie o farm de novo.",
+                "aviso",
+            )
+
     # ---------- anti-AFK ----------
 
     def _anti_afk(self):
@@ -192,33 +295,75 @@ class Automacao:
                     self.avisar(f"Anti-AFK falhou: {e}", "erro")
         finally:
             try:
-                self._largar_tecla()
+                self._parar_movimento()
             except OSError:
                 pass  # o encerrar() ainda solta todas as teclas
 
     def _passo_afk(self):
-        """Segura uma tecla W/A/S/D de tempos em tempos, só na partida e com o jogo em foco."""
+        """Mexe o personagem de tempos em tempos, só na partida e com o jogo em foco: anda numa
+        direção sorteada e, com a opção ligada, às vezes pula ou vira a câmera no caminho."""
         agora = self.sistema.agora()
         ativo = self.ajustes.anti_afk and self.em_partida and not self.parar.is_set() and self._foco_ok()
-        if self._tecla:
-            if not ativo or agora >= self._soltar_em:
-                self._largar_tecla()
-                self._proximo_afk = agora + self.ajustes.afk_a_cada
+        if self._mexendo_ate is not None:
+            if not ativo or agora >= self._mexendo_ate:
+                self._proximo_afk = agora + _sortear(self.ajustes.afk_a_cada)
+                self._parar_movimento()
+            else:
+                self._no_caminho(agora)
             return
         if not ativo:
-            self._proximo_afk = agora + self.ajustes.afk_a_cada  # conta a partir do início da partida
+            self._proximo_afk = agora + _sortear(self.ajustes.afk_a_cada)  # conta a partir do início da partida
             return
         if agora >= self._proximo_afk:
-            self._proximo_afk = agora + self.ajustes.afk_a_cada  # se apertar falhar, só tenta na próxima vez
-            tecla = random.choice("wasd")
-            self.sistema.apertar(tecla)
-            self._tecla = tecla
-            self._soltar_em = agora + self.ajustes.afk_segurar
+            self._comecar_movimento(agora)
 
-    def _largar_tecla(self):
-        tecla, self._tecla = self._tecla, None
-        if tecla:
-            self.sistema.soltar(tecla)
+    def _comecar_movimento(self, agora):
+        duracao = _sortear(self.ajustes.afk_segurar)
+        self._mexendo_ate = agora + duracao  # marcado antes de apertar: se falhar, só perde esta vez
+        if self.ajustes.afk_variado:
+            if random.random() < CHANCE_PULO:
+                self._pulo_em = agora + random.uniform(0, duracao * 0.7)
+            if random.random() < CHANCE_VIRAR:
+                self._virar = random.choice((-1, 1)) * random.randint(*VIRAR)
+                self._passo_virar = -(-abs(self._virar) // PASSOS_VIRAR)  # divide arredondando para cima
+        for tecla in random.choice(DIRECOES):
+            self.sistema.apertar(tecla)
+            self._presas.append(tecla)
+
+    def _no_caminho(self, agora):
+        """Pulo e virada de câmera no meio de um movimento (o _passo_afk roda a cada 0,1 s)."""
+        if self._virar:
+            passo = max(-self._passo_virar, min(self._passo_virar, self._virar))
+            self._virar -= passo
+            try:
+                self.sistema.virar(passo)
+            except OSError:
+                self._virar = 0  # um erro por movimento basta no registro
+                raise
+        if self._pulo_em is not None and agora >= self._pulo_em:
+            self._pulo_em = None
+            self.sistema.apertar("espaco")
+            self._presas.append("espaco")
+        elif "espaco" in self._presas:
+            self._presas.remove("espaco")  # um toque: solta no passo seguinte, 0,1 s depois
+            self.sistema.soltar("espaco")
+
+    def _parar_movimento(self):
+        """Solta tudo o que o anti-AFK segura; tenta todas as teclas mesmo se uma falhar."""
+        self._mexendo_ate, self._pulo_em, self._virar = None, None, 0
+        presas, self._presas = self._presas, []
+        erro = None
+        for tecla in presas:
+            try:
+                self.sistema.soltar(tecla)
+            except OSError as e:
+                erro = e
+        if erro:
+            raise erro
+
+
+def _sortear(base):
+    return base * random.uniform(*VARIACAO)
 
 
 def _nota(nota):

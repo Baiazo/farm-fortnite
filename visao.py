@@ -37,11 +37,12 @@ def salvar_print(img, pasta, manter=20):
     return caminho
 
 
-def salvar_gravacao(img, pasta):
-    """Print do F9 em PNG, sem perda (vira material para recortar a bússola, o minimapa...).
-    Nunca apaga nada: quem limpa a pasta é o usuário."""
+def salvar_gravacao(img, pasta, prefixo="partida"):
+    """Print da partida em PNG, sem perda (vira material para recortar a bússola, o minimapa...).
+    O F9 usa "partida" e a gravação automática, "auto". Nunca apaga nada: quem limpa a pasta é o
+    usuário."""
     os.makedirs(pasta, exist_ok=True)
-    nome = datetime.now().strftime("partida-%Y%m%d-%H%M%S-%f")[:-3] + ".png"
+    nome = datetime.now().strftime(f"{prefixo}-%Y%m%d-%H%M%S-%f")[:-3] + ".png"
     caminho = os.path.join(pasta, nome)
     img.convert("RGB").save(caminho)
     return caminho

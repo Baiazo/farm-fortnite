@@ -30,10 +30,11 @@ WM_QUIT = 0x0012
 MOD_NOREPEAT = 0x4000
 VK_F8 = 0x77
 VK_F9 = 0x78
+VK_F10 = 0x79
 BELOW_NORMAL_PRIORITY_CLASS = 0x4000
 
 # Scan codes físicos: o jogo lê a posição da tecla, não a letra
-SCAN = {"w": 0x11, "a": 0x1E, "s": 0x1F, "d": 0x20}
+SCAN = {"w": 0x11, "a": 0x1E, "s": 0x1F, "d": 0x20, "espaco": 0x39}
 
 
 class MOUSEINPUT(ctypes.Structure):
@@ -172,6 +173,11 @@ def clicar(x, y):
     _enviar(_mouse(MOUSEEVENTF_LEFTUP))
     time.sleep(0.1)
     mover(*antes)
+
+
+def virar(dx, dy=0):
+    """Move o mouse a partir de onde ele está. Na partida o cursor fica preso e isso vira a câmera."""
+    _enviar(_mouse(MOUSEEVENTF_MOVE, dx, dy))
 
 
 def apertar(tecla):

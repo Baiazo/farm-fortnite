@@ -22,10 +22,10 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 
 | Arquivo | Papel |
 |---|---|
-| `farm.py` | Janela Tk com tema próprio (cores em `COR`, fontes Bahnschrift/Segoe UI), captura dos botões, teste na tela, F9 que grava prints, ciclo de vida |
-| `automacao.py` | Thread que lê a tela e clica + thread do anti-AFK. Tudo que mexe fora do programa passa por `Sistema`, que os testes trocam por um falso |
+| `farm.py` | Janela Tk com tema próprio (cores em `COR`, fontes Bahnschrift/Segoe UI), captura dos botões, teste na tela, F9 (um print) e F10 (um print por segundo) para gravar a partida, ciclo de vida |
+| `automacao.py` | Thread que lê a tela, clica e grava prints da partida (opção, `auto-*.png`, até 200 por vez) + thread do anti-AFK (anda, pula e vira a câmera com mouse relativo, tempos sorteados) + `GravacaoSeguida` do F10 (`seguido-*.png`, só com o jogo em foco, até 300). Tudo que mexe fora do programa passa por `Sistema`, que os testes trocam por um falso |
 | `visao.py` | Correlação normalizada (mesma conta do `TM_CCOEFF_NORMED`) via FFT com numpy, em meia resolução; print preto e prints de travamento |
-| `entrada.py` | `SendInput` com scan codes, F8 e F9 por `RegisterHotKey` (id = tecla), janela em foco (título e classe, sem abrir o processo do jogo); DPI real e prioridade abaixo do normal |
+| `entrada.py` | `SendInput` com scan codes, F8, F9 e F10 por `RegisterHotKey` (id = tecla), janela em foco (título e classe, sem abrir o processo do jogo); DPI real e prioridade abaixo do normal |
 | `config.py` | `BOTOES` (a ordem é a prioridade de clique; `max_cliques` por botão), `Ajustes` salvos em `ajustes.json`, `LIMITES` |
 | `gerar_exe.py` | Chama o PyInstaller (ícone e versão gerados na hora em `build/`) e troca o programa em `dist\Farm\` mantendo os dados |
 
@@ -47,14 +47,24 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 
 ## Estado
 
-- 31 testes passando; janela, estados e captura conferidos por print com botões falsos.
+- 39 testes passando; janela, estados e captura conferidos por print com botões falsos.
 - `Farm.exe` gerado e aberto aqui (abre em ~4 s, dados ao lado do exe, fecha sem erro).
-- Ainda não testado no Fortnite de verdade. No primeiro teste, conferir: se o Testar reconhece a
-  janela do jogo (classe `UnrealWindow`, título começando com "Fortnite"), se os cliques pegam e se
-  o Jogar some da tela depois do clique (senão o farm para após 3 cliques).
-- Próxima fase (pedida pelo Matheus em 2026-11-03): jogar a partida, não só os menus. Plano: ele
-  grava prints com o F9 numa partida normal; daqui sai a leitura da bússola do topo, do círculo da
-  zona no minimapa e do ícone de baú do "Visualizar efeitos sonoros", testada nos prints sem abrir o
-  jogo. Depois: virar a câmera com mouse relativo (ainda não se sabe se o Fortnite aceita) e andar
-  até a zona, e depois ir até o baú e segurar E no aviso. Mirar ou atirar em jogador fica de fora.
-  Já foi avisado: andar pelo mapa sozinho aumenta bastante o risco de ban.
+- Primeiro teste no Fortnite de verdade em 2026-11-03, pelo `Farm.exe`: pausou com o jogo fora de
+  foco e voltou sozinho, clicou em Jogar (nota 0,98), a partida começou, o personagem morreu em ~4
+  min e o farm clicou em Voltar ao saguão (0,92) e em Jogar de novo. Continuar e Pop-up têm imagem
+  mas ainda não apareceram; Resgatar tudo e Pular estão sem imagem. As imagens que ele capturou em
+  Pop-up e Continuar são do botão PULAR, e a do Continuar pegou junto um texto de outro programa
+  que fica por cima da tela.
+- Noite de 2026-11-03 para 04, com o anti-AFK novo: 36 partidas seguidas sem erro (22:47 a 07:18,
+  ~14 min cada) e 281 prints `auto-`. Ele joga em esquadrão (3 colegas); depois de morrer o jogo
+  fica no modo espectador por 5 a 10 min até aparecer o Voltar ao saguão. Quase sempre morre na
+  tempestade. O pulo do anti-AFK também sai no ônibus, então ele salta cedo e cai muito no mar.
+- Próxima fase, decidida com o Matheus em 2026-11-04: cair sempre no mesmo lugar e abrir baús,
+  guiado por marcador. Repetir os comandos dele não serve, porque a rota do ônibus muda a cada
+  partida. Plano: abrir o mapa (M) e marcar o lugar; no ônibus, ler a distância até o marcador na
+  bússola e pular quando ela parar de cair; na queda, virar a câmera até o marcador ficar no centro
+  da bússola e segurar W; no chão, andar até o aviso "Abrir" e segurar E. Tudo por imagem, com
+  modelos recortados dos prints dele (F9/F10). Gravar o teclado dele foi descartado: precisaria
+  mudar a regra do hook. NitroGen fica só como curiosidade (ver memória `nitrogen-teste`). Mirar ou
+  atirar em jogador fica de fora. Já foi avisado: andar e lootear sozinho aumenta bastante o risco
+  de ban. Falta: o lugar onde ele quer cair e os prints da rotina feita por ele.

@@ -105,6 +105,9 @@ class TestVisao(unittest.TestCase):
             self.assertEqual(len(os.listdir(os.path.dirname(caminho))), 25)
             with Image.open(caminho) as lida:
                 self.assertEqual(np.asarray(lida.convert("RGB")).tobytes(), np.asarray(tela.convert("RGB")).tobytes())
+            self.assertTrue(os.path.basename(caminho).startswith("partida-"))
+            auto = visao.salvar_gravacao(tela, os.path.join(pasta, "gravacao"), "auto")
+            self.assertTrue(os.path.basename(auto).startswith("auto-"))
 
     def test_desempenho_seis_botoes_1440p(self):
         origem = _tela_falsa(semente=1)
@@ -134,11 +137,14 @@ class TestAjustes(unittest.TestCase):
         self.assertEqual(self._carregar("[1, 2]"), Ajustes())
 
     def test_tipos_errados_e_faixa(self):
-        a = self._carregar(json.dumps({"limiar": 5, "intervalo": "rápido", "anti_afk": "sim", "afk_a_cada": 0}))
+        a = self._carregar(json.dumps(
+            {"limiar": 5, "intervalo": "rápido", "anti_afk": "sim", "afk_a_cada": 0, "gravar_a_cada": 1}
+        ))
         self.assertEqual(a.limiar, 0.99)
         self.assertEqual(a.intervalo, Ajustes().intervalo)
         self.assertIs(a.anti_afk, True)
         self.assertEqual(a.afk_a_cada, 1.0)
+        self.assertEqual(a.gravar_a_cada, 5.0)
 
     def test_salvar_e_ler(self):
         with tempfile.TemporaryDirectory() as pasta:
@@ -163,7 +169,9 @@ class SistemaFalso:
         self.tela = _tela_falsa(320, 180)
         self.cliques = []
         self.teclas = []  # ("apertar" ou "soltar", tecla)
+        self.viradas = []  # quanto o mouse andou em cada passo da câmera
         self.prints = []
+        self.gravados = []
 
     def agora(self):
         return self.tempo
@@ -186,9 +194,20 @@ class SistemaFalso:
     def soltar_tudo(self):
         pass
 
+    def virar(self, dx, dy=0):
+        self.viradas.append(dx)
+
     def salvar_print(self, img):
         self.prints.append(img)
         return os.path.join("prints", f"travado-{len(self.prints)}.jpg")
+
+    def salvar_gravacao(self, img):
+        self.gravados.append(img)
+        return os.path.join("gravacao", f"auto-{len(self.gravados)}.png")
+
+    def salvar_seguido(self, img):
+        self.gravados.append(img)
+        return os.path.join("gravacao", f"seguido-{len(self.gravados)}.png")
 
 
 def _visivel(x=100, y=200):
@@ -206,6 +225,10 @@ class TestAutomacao(unittest.TestCase):
         self.farm = automacao.Automacao(
             Ajustes(), {}, lambda texto, tipo="info": self.avisos.append((tipo, texto)), self.sistema
         )
+        # tempos do anti-AFK exatamente iguais aos ajustes: o teste não depende da sorte
+        self._sem_sorteio = mock.patch.object(automacao, "_sortear", lambda base: base)
+        self._sem_sorteio.start()
+        self.addCleanup(self._sem_sorteio.stop)
 
     def _tela(self, **notas):
         """Uma leitura da tela, alguns segundos depois da anterior."""
@@ -278,34 +301,111 @@ class TestAutomacao(unittest.TestCase):
         self.assertEqual(self.sistema.prints, ["print"])
         self.assertIn("prints", self.avisos[-1][1])
 
+    def _afk(self, segundos):
+        """Roda o anti-AFK como a thread dele faz: um passo a cada 0,1 s."""
+        for _ in range(round(segundos * 10)):
+            self.sistema.tempo += 0.1
+            self.farm._passo_afk()
+
+    def _apertadas(self):
+        return [t for acao, t in self.sistema.teclas if acao == "apertar"]
+
+    def _soltas(self):
+        return [t for acao, t in self.sistema.teclas if acao == "soltar"]
+
     def test_anti_afk_so_na_partida(self):
         a = self.farm.ajustes
-        for _ in range(3):
-            self.sistema.tempo += a.afk_a_cada
-            self.farm._passo_afk()
+        a.afk_variado = False
+        self._afk(a.afk_a_cada * 3)
         self.assertEqual(self.sistema.teclas, [])
 
         self.farm.em_partida = True
-        self.farm._passo_afk()
-        self.sistema.tempo += a.afk_a_cada
-        self.farm._passo_afk()
-        self.assertEqual(self.sistema.teclas[0][0], "apertar")
-        self.sistema.tempo += a.afk_segurar
-        self.farm._passo_afk()
-        self.assertEqual(self.sistema.teclas[1], ("soltar", self.sistema.teclas[0][1]))
+        self._afk(a.afk_a_cada + 0.2)  # folga de dois passos de 0,1 s
+        self.assertIn(tuple(self._apertadas()), automacao.DIRECOES)
+        self.assertEqual(self._soltas(), [])
+        self._afk(a.afk_segurar)
+        self.assertEqual(self._soltas(), self._apertadas())
+        self.assertEqual(self.sistema.viradas, [])
+
+    def test_anti_afk_mexe_varias_vezes(self):
+        a = self.farm.ajustes
+        self.farm.em_partida = True
+        with mock.patch.object(self.farm, "_comecar_movimento", wraps=self.farm._comecar_movimento) as comecar:
+            self._afk(60)
+        # um movimento a cada afk_segurar + afk_a_cada (4 s no padrão), mais a folga dos passos de 0,1 s
+        self.assertGreaterEqual(comecar.call_count, int(60 / (a.afk_segurar + a.afk_a_cada + 0.2)) - 1)
+
+    def test_tempos_sorteados_em_volta_do_ajuste(self):
+        self._sem_sorteio.stop()
+        try:
+            tempos = [automacao._sortear(2.0) for _ in range(50)]
+        finally:
+            self._sem_sorteio.start()
+        menor, maior = automacao.VARIACAO
+        self.assertTrue(all(2.0 * menor <= t <= 2.0 * maior for t in tempos))
+        self.assertGreater(len(set(tempos)), 1)
+
+    def test_anti_afk_pula_e_vira_a_camera(self):
+        a = self.farm.ajustes
+        self._afk(0.1)  # um passo no saguão: a pausa começa a contar quando a partida começa
+        self.farm.em_partida = True
+        with mock.patch.object(automacao.random, "random", return_value=0.0):  # o sorteio sempre cai em pular e virar
+            self._afk(a.afk_a_cada + 0.2 + a.afk_segurar + 0.2)  # um movimento inteiro
+        total = sum(self.sistema.viradas)
+        self.assertTrue(automacao.VIRAR[0] <= abs(total) <= automacao.VIRAR[1])
+        self.assertLessEqual(len(self.sistema.viradas), automacao.PASSOS_VIRAR)
+        self.assertTrue(all((v > 0) == (total > 0) for v in self.sistema.viradas))  # vira para um lado só
+        pulo = self.sistema.teclas.index(("apertar", "espaco"))
+        self.assertEqual(self.sistema.teclas[pulo + 1], ("soltar", "espaco"))  # um toque, não fica segurando
+        self.assertEqual(sorted(self._apertadas()), sorted(self._soltas()))
 
     def test_anti_afk_solta_a_tecla_se_o_jogo_sai_do_foco(self):
+        self.farm.ajustes.afk_variado = False
         self.farm.em_partida = True
-        self.farm._passo_afk()
-        self.sistema.tempo += self.farm.ajustes.afk_a_cada
-        self.farm._passo_afk()
+        self._afk(self.farm.ajustes.afk_a_cada + 0.2)
+        apertadas = [t for acao, t in self.sistema.teclas if acao == "apertar"]
+        self.assertTrue(apertadas)
         self.sistema.foco = False
-        self.sistema.tempo += 0.1
-        self.farm._passo_afk()
-        self.assertEqual([acao for acao, _ in self.sistema.teclas], ["apertar", "soltar"])
-        self.sistema.tempo += 60
-        self.farm._passo_afk()
-        self.assertEqual(len(self.sistema.teclas), 2)
+        self._afk(0.1)
+        self.assertEqual([t for acao, t in self.sistema.teclas if acao == "soltar"], apertadas)
+        antes = len(self.sistema.teclas)
+        self._afk(60)
+        self.assertEqual(len(self.sistema.teclas), antes)
+
+    def test_grava_prints_so_na_partida(self):
+        a = self.farm.ajustes
+        a.gravar_partida = True
+        for _ in range(3):
+            self.sistema.tempo += a.gravar_a_cada
+            self.farm._passo()
+        self.assertEqual(self.sistema.gravados, [])  # no saguão não grava
+
+        self.farm.em_partida = True
+        self.farm._passo()
+        self.assertEqual(self.sistema.gravados, [])  # o primeiro sai gravar_a_cada depois do início
+        self.sistema.tempo += a.gravar_a_cada
+        self.farm._passo()
+        self.sistema.tempo += 1
+        self.farm._passo()
+        self.assertEqual(self.sistema.gravados, [self.sistema.tela])
+        self.sistema.tempo += a.gravar_a_cada
+        self.farm._passo()
+        self.assertEqual(len(self.sistema.gravados), 2)
+
+        a.gravar_partida = False
+        self.sistema.tempo += a.gravar_a_cada
+        self.farm._passo()
+        self.assertEqual(len(self.sistema.gravados), 2)
+
+    def test_gravacao_para_no_limite(self):
+        self.farm.ajustes.gravar_partida = True
+        self.farm.em_partida = True
+        self.farm.gravados = automacao.GRAVAR_NO_MAXIMO - 1
+        for _ in range(3):
+            self.sistema.tempo += self.farm.ajustes.gravar_a_cada
+            self.farm._passo()
+        self.assertEqual(len(self.sistema.gravados), 1)
+        self.assertEqual(sum("Gravação parada" in texto for _, texto in self.avisos), 1)
 
 
 class TestEntrada(unittest.TestCase):
@@ -366,6 +466,46 @@ class TestGravacaoF9(unittest.TestCase):
         texto, tipo, bipes, arquivos = self._apertar_f9(Image.new("RGB", (320, 180)))
         self.assertEqual((tipo, arquivos), ("erro", []))
         self.assertEqual(bipes, [farm.winsound.MB_ICONHAND])
+
+
+class TestGravacaoSeguida(unittest.TestCase):
+    """O F10 com tela e relógio falsos."""
+
+    def setUp(self):
+        self.sistema = SistemaFalso()
+        self.avisos = []
+        self.gravacao = automacao.GravacaoSeguida(lambda texto, tipo="info": self.avisos.append((tipo, texto)), self.sistema)
+
+    def test_grava_so_com_o_jogo_na_frente(self):
+        self.gravacao.passo()
+        self.sistema.foco = False
+        self.gravacao.passo()
+        self.assertEqual(len(self.sistema.gravados), 1)  # nunca tira print de outra janela
+        self.sistema.foco = True
+        self.sistema.tela = Image.new("RGB", (320, 180))
+        self.gravacao.passo()
+        self.assertEqual(len(self.sistema.gravados), 1)  # print preto não serve
+
+    def test_para_sozinho_no_limite(self):
+        self.gravacao.gravados = automacao.SEGUIDO_NO_MAXIMO - 1
+        for _ in range(3):
+            self.gravacao.passo()
+        self.assertEqual(len(self.sistema.gravados), 1)
+        self.assertTrue(self.gravacao.parar.is_set())
+
+    def test_liga_e_desliga(self):
+        with mock.patch.object(automacao, "SEGUIDO_A_CADA", 0.05):
+            self.assertTrue(self.gravacao.alternar())
+            time.sleep(0.3)
+            self.assertFalse(self.gravacao.alternar())
+            self.gravacao._thread.join(2)
+        self.assertFalse(self.gravacao._thread.is_alive())
+        self.assertGreater(len(self.sistema.gravados), 1)
+        self.assertIn("gravação parada", self.avisos[-1][1])
+        # liga de novo depois de parar
+        self.assertTrue(self.gravacao.alternar())
+        self.gravacao.alternar()
+        self.gravacao._thread.join(2)
 
 
 def _escrever(caminho, texto=""):

@@ -26,7 +26,7 @@ except ImportError:
 
 import entrada
 import visao
-from automacao import Automacao
+from automacao import Automacao, GravacaoSeguida
 from config import ARQUIVO_REGISTRO, BOTOES, LIMITES, PASTA, PASTA_BOTOES, PASTA_GRAVACAO, Ajustes, caminho_botao
 
 TITULO = "Farm Automático"
@@ -256,6 +256,8 @@ class App:
         self.tem_jogar = False
         self.atalho = entrada.AtalhoGlobal(lambda: self.fila.put(("alternar", None)))
         self.atalho_gravar = entrada.AtalhoGlobal(self._gravar, vk=entrada.VK_F9)
+        self.seguida = GravacaoSeguida(lambda texto, tipo="info": self.fila.put(("log", (texto, tipo))))
+        self.atalho_seguida = entrada.AtalhoGlobal(self._alternar_seguida, vk=entrada.VK_F10)
         self._vars = []           # o Tk perde a variável se ninguém guardar referência
         self._miniaturas = {}     # chave -> (data do arquivo, imagem), para não reler o PNG à toa
         self._mostrado = None     # último estado desenhado no topo
@@ -266,9 +268,9 @@ class App:
         self.root.configure(bg=COR["fundo"])
         self.root.report_callback_exception = self._erro_interface
         self.escala = self.root.winfo_fpixels("1i") / 96
-        alt = min(self._px(640), self.root.winfo_screenheight() - self._px(80))
+        alt = min(self._px(700), self.root.winfo_screenheight() - self._px(80))
         self.root.geometry(f"{self._px(880)}x{alt}")
-        self.root.minsize(self._px(800), min(self._px(560), alt))
+        self.root.minsize(self._px(800), min(self._px(660), alt))
         self.root.attributes("-topmost", self.ajustes.sempre_no_topo)
         self.root.protocol("WM_DELETE_WINDOW", self.sair)
         self.fontes = _fontes(self.root)
@@ -466,15 +468,22 @@ class App:
         ttk.Label(leitura, text="s", style="Cartao.TLabel").pack(side="left")
 
         self._opcao(g, 2, "Pausar quando o Fortnite sair do primeiro plano", "so_com_jogo_em_foco")
-        self._opcao(g, 3, "Anti-AFK na partida (segura W/A/S/D aleatório)", "anti_afk")
+        self._opcao(g, 3, "Anti-AFK na partida (anda com W/A/S/D)", "anti_afk")
         afk = ttk.Frame(g, style="Cartao.TFrame")
         afk.grid(row=4, column=0, columnspan=3, sticky="w", padx=(px(24), 0), pady=(px(4), 0))
-        ttk.Label(afk, text="por", style="CartaoSuave.TLabel").pack(side="left")
+        ttk.Label(afk, text="mexe por", style="CartaoSuave.TLabel").pack(side="left")
         self._numero(afk, "afk_segurar", 0.5).pack(side="left", padx=px(6))
-        ttk.Label(afk, text="s, a cada", style="CartaoSuave.TLabel").pack(side="left")
+        ttk.Label(afk, text="s e para", style="CartaoSuave.TLabel").pack(side="left")
         self._numero(afk, "afk_a_cada", 1).pack(side="left", padx=px(6))
         ttk.Label(afk, text="s", style="CartaoSuave.TLabel").pack(side="left")
-        self._opcao(g, 5, "Manter esta janela sempre no topo", "sempre_no_topo", self._mudar_topo)
+        self._opcao(g, 5, "Pular e virar a câmera também", "afk_variado", recuo=24)
+        self._opcao(g, 6, "Gravar prints da partida em gravacao", "gravar_partida")
+        gravar = ttk.Frame(g, style="Cartao.TFrame")
+        gravar.grid(row=7, column=0, columnspan=3, sticky="w", padx=(px(24), 0), pady=(px(4), 0))
+        ttk.Label(gravar, text="um a cada", style="CartaoSuave.TLabel").pack(side="left")
+        self._numero(gravar, "gravar_a_cada", 5).pack(side="left", padx=px(6))
+        ttk.Label(gravar, text="s", style="CartaoSuave.TLabel").pack(side="left")
+        self._opcao(g, 8, "Manter esta janela sempre no topo", "sempre_no_topo", self._mudar_topo)
 
     def _montar_rodape(self, pai):
         abrir = "o Farm.exe" if getattr(sys, "frozen", False) else "o iniciar.bat"
@@ -482,7 +491,10 @@ class App:
             f"Sem administrador: se os cliques não pegarem, abra {abrir} como administrador."
         )
         ttk.Label(
-            pai, text=f"F8 inicia e para de qualquer lugar. F9 salva um print da partida em gravacao. {admin}",
+            pai, text=(
+                "F8 inicia e para de qualquer lugar. F9 salva um print da partida em gravacao; F10 grava "
+                f"um por segundo até apertar de novo. {admin}"
+            ),
             style="Rodape.TLabel",
             wraplength=self._px(320), justify="left",
         ).pack(side="bottom", anchor="w")
@@ -552,7 +564,7 @@ class App:
             pai, from_=menor, to=maior, increment=passo, width=5, textvariable=var, font=(self.fontes["corpo"], 10)
         )
 
-    def _opcao(self, pai, linha, texto, campo, depois=None):
+    def _opcao(self, pai, linha, texto, campo, depois=None, recuo=0):
         var = tk.BooleanVar(value=getattr(self.ajustes, campo))
         self._vars.append(var)
 
@@ -562,7 +574,7 @@ class App:
                 depois()
 
         ttk.Checkbutton(pai, text=texto, variable=var, command=mudou, style="Cartao.TCheckbutton").grid(
-            row=linha, column=0, columnspan=3, sticky="w", pady=(self._px(8), 0)
+            row=linha, column=0, columnspan=3, sticky="w", padx=(self._px(recuo), 0), pady=(self._px(8), 0)
         )
 
     def _mudar_limiar(self, _valor):
@@ -815,6 +827,14 @@ class App:
 
         threading.Thread(target=salvar, daemon=True).start()
 
+    def _alternar_seguida(self):
+        """F10: liga ou desliga a gravação de um print por segundo (roda na thread do atalho)."""
+        if self.seguida.alternar():
+            winsound.MessageBeep(winsound.MB_OK)
+            self.fila.put(("log", ("F10: gravando um print por segundo. F10 de novo para parar.", "ok")))
+        else:
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)  # a mensagem de parada vem da própria gravação
+
     # ---------- ciclo de vida ----------
 
     def _estado(self):
@@ -829,7 +849,10 @@ class App:
         if a.situacao == "preto":
             return "preto", "O jogo não aparece no print. No Fortnite, use “Tela cheia em janela”."
         if a.em_partida:
-            return "partida", "Anti-AFK ligado." if self.ajustes.anti_afk else "Anti-AFK desligado."
+            detalhe = "Anti-AFK ligado." if self.ajustes.anti_afk else "Anti-AFK desligado."
+            if self.ajustes.gravar_partida:
+                detalhe += f" {a.gravados} prints gravados."
+            return "partida", detalhe
         return "procurando", f"Lendo a tela a cada {_formatar(self.ajustes.intervalo)} s."
 
     def _desenhar_estado(self):
@@ -880,6 +903,9 @@ class App:
         erro = self.atalho_gravar.iniciar()
         if erro:
             self.log(f"F9 indisponível ({erro}): outro programa usa essa tecla.", "aviso")
+        erro = self.atalho_seguida.iniciar()
+        if erro:
+            self.log(f"F10 indisponível ({erro}): outro programa usa essa tecla.", "aviso")
         if self.tem_jogar:
             self.log("Pronto. Abra o Fortnite no saguão e aperte F8.")
         else:
@@ -892,6 +918,8 @@ class App:
         self.parar()
         self.atalho.encerrar()
         self.atalho_gravar.encerrar()
+        self.atalho_seguida.encerrar()
+        self.seguida.parar.set()
         self._salvar_ajustes()
         self.root.destroy()
 

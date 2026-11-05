@@ -49,6 +49,7 @@ LIMITES = {
     "pausa_cliques": (1.0, 30.0),
     "afk_a_cada": (1.0, 600.0),
     "afk_segurar": (0.5, 30.0),
+    "gravar_a_cada": (5.0, 600.0),
 }
 
 
@@ -66,10 +67,13 @@ class Ajustes:
     limiar: float = 0.80        # nota mínima (0 a 1) para considerar que achou o botão
     intervalo: float = 2.0      # segundos entre leituras da tela
     pausa_cliques: float = 3.0  # tempo mínimo entre dois cliques
-    anti_afk: bool = True       # segurar W/A/S/D durante a partida
+    anti_afk: bool = True       # andar com W/A/S/D durante a partida
+    afk_variado: bool = True    # no anti-AFK, às vezes pular e virar a câmera
     so_com_jogo_em_foco: bool = True  # pausar quando o Fortnite sai do primeiro plano
-    afk_a_cada: float = 10.0
-    afk_segurar: float = 3.0
+    afk_a_cada: float = 2.0     # pausa entre um movimento e outro (sorteada em volta disso)
+    afk_segurar: float = 2.0    # duração de cada movimento (também sorteada)
+    gravar_partida: bool = False  # salvar sozinho prints da partida em gravacao/
+    gravar_a_cada: float = 15.0
     sempre_no_topo: bool = False
 
     @classmethod
