@@ -181,6 +181,37 @@ class TestAvisos(unittest.TestCase):
         self.assertLess(nota, 0.6)
 
 
+class TestMapa(unittest.TestCase):
+    def _ilha(self):
+        """Uma "ilha" de manchas coloridas, como o mapa do jogo visto de cima."""
+        rng = np.random.default_rng(21)
+        img = Image.new("RGB", (220, 200), (20, 60, 140))
+        d = ImageDraw.Draw(img)
+        for _ in range(60):
+            x, y, r = rng.integers(10, 210), rng.integers(10, 190), rng.integers(6, 22)
+            d.ellipse((x - r, y - r, x + r, y + r), fill=tuple(int(c) for c in rng.integers(40, 250, 3)))
+        return img
+
+    def test_acha_o_lugar_em_outro_zoom(self):
+        molde = self._ilha()
+        for escala, (x0, y0) in ((1.3, (700, 300)), (0.8, (1200, 600))):
+            with self.subTest(escala=escala):
+                tela = Image.new("RGB", (1920, 1080), (10, 30, 70))
+                larg, alt = round(220 * escala), round(200 * escala)
+                tela.paste(molde.resize((larg, alt), Image.LANCZOS), (x0, y0))
+                x, y = leitura.ponto_no_mapa(tela, molde, (100, 90))
+                self.assertLessEqual(abs(x - (x0 + 100 * escala)) + abs(y - (y0 + 90 * escala)), 8)
+
+    def test_sem_ilha_nao_clica_em_lugar_nenhum(self):
+        self.assertIsNone(leitura.ponto_no_mapa(_fundo(13), self._ilha(), (100, 90)))
+
+    def test_pino_do_marcador_no_lugar_do_clique(self):
+        tela = _fundo(14)
+        _pino(tela, 800, 400)  # a ponta do pino fica uns 13 px abaixo do centro
+        self.assertTrue(leitura.pino_perto(tela, 800, 413))
+        self.assertFalse(leitura.pino_perto(tela, 1100, 413))
+
+
 class TestSinais(unittest.TestCase):
     def test_carrega_os_modelos_da_pasta(self):
         with tempfile.TemporaryDirectory() as pasta:

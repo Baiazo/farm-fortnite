@@ -63,6 +63,7 @@ ESTADOS = {
 }
 # Frase do topo enquanto o piloto está com o personagem
 FASES_PILOTO = {
+    "marcando": "Piloto pondo o marcador no mapa",
     "onibus": "Piloto no ônibus, esperando a hora de pular",
     "queda": "Piloto caindo até o marcador",
     "a_pe": "Piloto indo a pé até o marcador",
@@ -738,7 +739,9 @@ class App:
         )
         self.automacao.iniciar()
         self.log("Iniciado. Deixe o Fortnite aberto no saguão.")
-        if sinais:
+        if sinais and sinais.tem_lugar:
+            self.log(f"Piloto ligado: em cada partida ele põe o marcador em {sinais.lugar['nome']} sozinho.")
+        elif sinais:
             self.log("Piloto ligado: ponha o marcador no mapa antes de o ônibus sair.")
 
     def parar(self):

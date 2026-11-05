@@ -1,6 +1,8 @@
 """Piloto da partida: do ônibus até os baús, guiado pelo marcador que já está no mapa.
 
 Fases, uma depois da outra em cada partida:
+- marcando: com um lugar escolhido (sinais/lugar.json), abre o mapa, aperta REDEFINIR para ver a
+  ilha inteira, clica no lugar, confere o pino e fecha. Só clica com o mapa aberto no mesmo print.
 - esperando: na ilha de espera. Sai quando aparece "Espaço PARA PULAR" (portas do ônibus abertas).
 - onibus: lê a distância até o marcador e pula quando ela parar de cair (o ônibus passou do ponto
   mais perto) ou quando já está perto.
@@ -31,7 +33,11 @@ PARADO_NA_QUEDA = 5     # s sem a distância cair: já está no chão, longe do 
 TEMPO_A_PE = 90
 TEMPO_DE_BAUS = 120
 SEM_BAU = 30            # s sem nenhum ícone de baú: acabaram os baús por perto
-NO_CONTROLE = ("onibus", "queda", "a_pe", "baus")
+TENTAR_MAPA = 3.0       # s entre um M e outro enquanto a partida carrega
+ESPERA_MAPA = 0.7       # s para o mapa reagir ao REDEFINIR e ao clique
+TENTATIVAS_MAPA = 3
+TEMPO_MARCANDO = 150    # s tentando abrir o mapa; depois disso o marcador fica com o jogador
+NO_CONTROLE = ("marcando", "onibus", "queda", "a_pe", "baus")
 
 
 class Piloto:
@@ -55,9 +61,13 @@ class Piloto:
         return self._dist
 
     def reiniciar(self):
-        """Nova partida: volta a esperar o ônibus."""
+        """Nova partida: põe o marcador (se tem lugar escolhido) e espera o ônibus."""
         self.largar()
-        self.fase = "esperando"
+        self.fase = "marcando" if getattr(self.sinais, "tem_lugar", False) else "esperando"
+        self._mapa = None           # etapa no mapa: None, "abrindo", "redefinido", "clicado", "fechando"
+        self._mapa_ate = 0.0
+        self._tentativas_mapa = 0
+        self._alvo = None
         self.abertos = 0
         self._desde = None          # quando entrou na fase atual
         self._menor = None          # menor distância vista no ônibus
@@ -95,6 +105,43 @@ class Piloto:
         getattr(self, f"_{self.fase}")(img, agora)
 
     # ---------- fases ----------
+
+    def _marcando(self, img, agora):
+        if agora - self._desde >= TEMPO_MARCANDO and self._mapa != "fechando":
+            self._mudar("esperando", agora)
+            self.avisar("Piloto: não consegui abrir o mapa; ponha o marcador à mão.", "aviso")
+            return
+        aberto = self.sinais.aviso(img, "mapa")
+        if not aberto:
+            if self._mapa == "fechando":
+                self._mudar("esperando", agora)
+            elif agora >= self._mapa_ate:
+                # a partida ainda pode estar carregando, e aí o M não faz nada: tenta de novo daqui a pouco
+                self._tocar_tecla("m")
+                self._mapa, self._mapa_ate = "abrindo", agora + TENTAR_MAPA
+            return
+        if self._mapa in (None, "abrindo"):
+            self._tocar_tecla("shift")  # REDEFINIR: zoom do começo, com a ilha inteira à vista
+            self._mapa, self._mapa_ate = "redefinido", agora + ESPERA_MAPA
+        elif agora < self._mapa_ate:
+            return
+        elif self._mapa == "redefinido":
+            alvo = self.sinais.lugar_no_mapa(img)
+            if alvo is None:
+                self._falhou_no_mapa(agora, "não achei a ilha no mapa")
+                return
+            # na outra tentativa clica um pouco ao lado: clicar em cima do marcador tira ele
+            self._alvo = (alvo[0], alvo[1] + 12 * self._tentativas_mapa)
+            self.sistema.clicar(*self._alvo)  # o mapa está aberto neste mesmo print
+            self._mapa, self._mapa_ate = "clicado", agora + ESPERA_MAPA
+        elif self._mapa == "clicado":
+            if self.sinais.marcador_no_mapa(img, *self._alvo):
+                self._fechar_mapa(agora)
+                self.avisar(f"Piloto: marcador posto em {self.sinais.lugar['nome']}.", "partida")
+            else:
+                self._falhou_no_mapa(agora, "o marcador não apareceu no mapa")
+        elif self._mapa == "fechando":
+            self._fechar_mapa(agora)  # o M não fechou o mapa: aperta de novo
 
     def _esperando(self, img, agora):
         if self.sinais.aviso(img, "pular"):
@@ -174,6 +221,19 @@ class Piloto:
             self._virar(VIRAR_PROCURANDO)
 
     # ---------- ajudas ----------
+
+    def _fechar_mapa(self, agora):
+        self._tocar_tecla("m")
+        self._mapa, self._mapa_ate = "fechando", agora + TENTAR_MAPA
+
+    def _falhou_no_mapa(self, agora, motivo):
+        self._tentativas_mapa += 1
+        if self._tentativas_mapa >= TENTATIVAS_MAPA:
+            self._fechar_mapa(agora)
+            self.avisar(f"Piloto: {motivo}; ponha o marcador à mão.", "aviso")
+        else:
+            self._tocar_tecla("shift")
+            self._mapa, self._mapa_ate = "redefinido", agora + ESPERA_MAPA
 
     def _ir_ao_marcador(self, img, agora):
         self._segurar("w", True)

@@ -1,14 +1,17 @@
-"""Leitura do que o jogo mostra durante a partida, para o farm se guiar atÃ© o marcador e os baÃºs.
+"""Leitura do que o jogo mostra durante a partida, para o farm se guiar até o marcador e os baús.
 
-- O pino azul do marcador e a distÃ¢ncia ao lado dele ("524 m"). Fora da tela, o jogo pÃµe o pino
-  na borda, tambÃ©m com a distÃ¢ncia.
-- O Ã­cone de baÃº do "Visualizar efeitos sonoros", no anel em volta da mira: o lugar dele no anel
-  diz para que lado o baÃº estÃ¡.
-- Os avisos "PARA PULAR" (no Ã´nibus) e "VASCULHAR" (perto do baÃº).
+- O pino azul do marcador e a distância ao lado dele ("524 m"). Fora da tela, o jogo põe o pino
+  na borda, também com a distância.
+- O ícone de baú do "Visualizar efeitos sonoros", no anel em volta da mira: o lugar dele no anel
+  diz para que lado o baú está.
+- Os avisos "PARA PULAR" (no ônibus) e "VASCULHAR" (perto do baú).
+- No mapa (M): se ele está aberto, onde está a ilha (o zoom e a posição mudam a cada vez que
+  abre) e, a partir dela, onde clicar para pôr o marcador no lugar escolhido.
 
-Tudo por imagem, em resoluÃ§Ã£o cheia (os Ã­cones tÃªm de 10 a 25 px), com modelos recortados dos
-prints do prÃ³prio jogador. Os modelos ficam em sinais/, fora do git, como os botÃµes.
+Tudo por imagem, em resolução cheia (os ícones têm de 10 a 25 px), com modelos recortados dos
+prints do próprio jogador. Os modelos ficam em sinais/, fora do git, como os botões.
 """
+import json
 import math
 import os
 from collections import deque
@@ -22,19 +25,23 @@ from config import PASTA_SINAIS
 
 COR_PINO = np.array([22, 124, 231])  # azul do pino do marcador, o mesmo em todo print
 TOLERANCIA_COR = 12
-BRANCO = 200       # o texto da distÃ¢ncia Ã© branco com sombra preta
-ALTURA_TEXTO = 11  # linhas da faixa do texto da distÃ¢ncia, em 1080p
+BRANCO = 200       # o texto da distância é branco com sombra preta
+ALTURA_TEXTO = 11  # linhas da faixa do texto da distância, em 1080p
 NOTA_CARACTERE = 0.55
 NOTA_M = 0.60
 NOTA_BAU = 0.70
 NOTA_AVISO = 0.75
-# Anel do "Visualizar efeitos sonoros": raio em fraÃ§Ã£o da altura da tela (261 px em 1080p)
+# Anel do "Visualizar efeitos sonoros": raio em fração da altura da tela (261 px em 1080p)
 ANEL = (0.22, 0.27)
-# Onde procurar cada aviso, em fraÃ§Ã£o da tela (x0, y0, x1, y1)
+# Onde procurar cada aviso, em fração da tela (x0, y0, x1, y1)
 REGIAO_AVISOS = {
     "pular": (0.45, 0.40, 0.80, 0.70),
     "vasculhar": (0.30, 0.20, 0.85, 0.85),
+    "mapa": (0.0, 0.0, 0.15, 0.08),  # a aba "MAPA" no canto de cima: o mapa está aberto
 }
+NOTA_ILHA = 0.60
+# Tamanhos da ilha no mapa, em relação ao print de onde saiu o molde (1,0 = igual)
+ESCALAS_ILHA = (0.5, 2.2)
 
 
 @dataclass(frozen=True)
@@ -42,18 +49,18 @@ class Marcador:
     x: int
     y: int
     distancia: int  # metros
-    na_borda: bool  # fora da tela: o jogo mostra o pino na beira, do lado em que ele estÃ¡
+    na_borda: bool  # fora da tela: o jogo mostra o pino na beira, do lado em que ele está
 
 
 @dataclass(frozen=True)
 class IconeBau:
-    angulo: float  # graus: 0 em cima da mira (Ã  frente), 90 Ã  direita, -90 Ã  esquerda, Â±180 atrÃ¡s
-    raio: float    # pixels da mira atÃ© o Ã­cone
+    angulo: float  # graus: 0 em cima da mira (à frente), 90 à direita, -90 à esquerda, ±180 atrás
+    raio: float    # pixels da mira até o ícone
     nota: float
 
 
 def _componentes(m):
-    """Componentes conectados (vizinhanÃ§a 8) de uma mÃ¡scara pequena: lista de (ys, xs)."""
+    """Componentes conectados (vizinhança 8) de uma máscara pequena: lista de (ys, xs)."""
     h, w = m.shape
     visto = np.zeros_like(m, dtype=bool)
     saida = []
@@ -80,9 +87,9 @@ def achar_pinos(a):
     h, w = a.shape[:2]
     f = h / 1080
     m = np.abs(a.astype(np.int16) - COR_PINO).max(axis=2) <= TOLERANCIA_COR
-    m[: round(0.21 * h), round(0.88 * w):] = False  # o minimapa e a legenda do mapa tambÃ©m tÃªm o pino
-    m[: round(0.07 * h)] = False  # faixa de cima (bÃºssola, barra de nÃ­vel): azuis que nÃ£o sÃ£o o pino
-    # blocos de 4x4 com a cor do pino; os componentes sÃ³ sÃ£o montados em volta deles
+    m[: round(0.21 * h), round(0.88 * w):] = False  # o minimapa e a legenda do mapa também têm o pino
+    m[: round(0.07 * h)] = False  # faixa de cima (bússola, barra de nível): azuis que não são o pino
+    # blocos de 4x4 com a cor do pino; os componentes só são montados em volta deles
     b = m[: h // 4 * 4, : w // 4 * 4].reshape(h // 4, 4, w // 4, 4).sum(axis=(1, 3))
     usados = np.zeros(b.shape, dtype=bool)
     achados = []
@@ -93,14 +100,14 @@ def achar_pinos(a):
         usados[y0:by + 7, x0:bx + 7] = True
         for ys, xs in _componentes(m[y0 * 4:(by + 7) * 4, x0 * 4:(bx + 7) * 4]):
             larg, alt = xs.max() - xs.min() + 1, ys.max() - ys.min() + 1
-            # cabeÃ§a do pino: uns 12 x 18 px, maior quando estÃ¡ na borda da tela
+            # cabeça do pino: uns 12 x 18 px, maior quando está na borda da tela
             if 35 * f * f <= len(ys) <= 160 * f * f and 7 * f <= larg <= 18 * f and 9 * f <= alt <= 24 * f:
                 achados.append((int(xs.mean()) + x0 * 4, int(ys.mean()) + y0 * 4))
     return achados
 
 
 def faixa_da_distancia(a, x, y):
-    """Mapa de branco (float) das linhas do texto Ã  direita do pino em (x, y), ou None.
+    """Mapa de branco (float) das linhas do texto à direita do pino em (x, y), ou None.
     Devolve (faixa, x da primeira coluna da faixa na tela)."""
     h, w = a.shape[:2]
     x0, x1, y0, y1 = x + 3, min(w, x + 80), max(0, y - 4), min(h, y + 26)
@@ -129,7 +136,7 @@ class _Caractere:
 
 
 class Digitos:
-    """Modelos dos caracteres da distÃ¢ncia: "0" a "9" e "m", cada um com ALTURA_TEXTO linhas."""
+    """Modelos dos caracteres da distância: "0" a "9" e "m", cada um com ALTURA_TEXTO linhas."""
 
     def __init__(self, modelos):
         self.modelos = {c: _Caractere(np.asarray(f, dtype=np.float64)) for c, f in modelos.items()}
@@ -147,11 +154,11 @@ class Digitos:
         return cls(modelos)
 
     def ler(self, faixa):
-        """LÃª "524" de uma faixa com "524 m". Devolve None se nÃ£o achar nÃºmeros seguidos do "m".
+        """Lê "524" de uma faixa com "524 m". Devolve None se não achar números seguidos do "m".
 
-        O itÃ¡lico encosta um nÃºmero no outro, entÃ£o em vez de separar os pedaÃ§os brancos ele
-        testa as divisÃµes possÃ­veis (cada nÃºmero comeÃ§a de 1 px antes a 2 px depois do anterior,
-        o "m" vem depois de um espaÃ§o) e fica com a de melhor nota no conjunto.
+        O itálico encosta um número no outro, então em vez de separar os pedaços brancos ele
+        testa as divisões possíveis (cada número começa de 1 px antes a 2 px depois do anterior,
+        o "m" vem depois de um espaço) e fica com a de melhor nota no conjunto.
         """
         larg = faixa.shape[1]
         colunas = np.nonzero((faixa >= BRANCO).any(axis=0))[0]
@@ -168,25 +175,25 @@ class Digitos:
             return notas[c][x] if 0 <= x < len(notas[c]) else -1.0
 
         def buraco(x0, x1):
-            # colunas brancas que ficaram sem caractere: um "1" no lugar de um nÃºmero largo deixa sobra
+            # colunas brancas que ficaram sem caractere: um "1" no lugar de um número largo deixa sobra
             return 0.15 * float(tem_branco[min(max(x1, 0), larg)] - tem_branco[min(max(x0, 0), larg)])
 
-        # fim do Ãºltimo nÃºmero (x) -> (soma das notas - 0,5 por caractere, texto, pior nota)
+        # fim do último número (x) -> (soma das notas - 0,5 por caractere, texto, pior nota)
         estados = {}
         inicio = int(colunas[0])
-        # o primeiro nÃºmero pode vir depois de um pedaÃ§o branco que nÃ£o Ã© texto (o ponto do pino)
+        # o primeiro número pode vir depois de um pedaço branco que não é texto (o ponto do pino)
         for x in range(inicio - 2, inicio + 14):
             for c in "0123456789":
                 if c in notas and nota(c, x) > NOTA_CARACTERE - 0.2:
                     _guardar(estados, x + larguras[c], nota(c, x) - 0.5 - buraco(inicio, x), c, nota(c, x))
         melhor = None
-        for _ in range(4):  # atÃ© 4 nÃºmeros (9999 m)
+        for _ in range(4):  # até 4 números (9999 m)
             novos = {}
             for fim, (soma, texto, pior) in estados.items():
-                for x in range(fim + 1, fim + 7):  # o "m" vem depois de um espaÃ§o
+                for x in range(fim + 1, fim + 7):  # o "m" vem depois de um espaço
                     n = nota("m", x)
                     total = soma + n - 0.5 - buraco(fim, x)
-                    # o "m" tem que ser bem nÃ­tido: o pÃ© de um nÃºmero parece um "m" pela metade
+                    # o "m" tem que ser bem nítido: o pé de um número parece um "m" pela metade
                     if n >= NOTA_M and pior >= NOTA_CARACTERE - 0.2 and (melhor is None or total > melhor[0]):
                         melhor = (total, texto, min(pior, n))
                 for x in range(fim - 1, fim + 3):
@@ -206,8 +213,8 @@ def _guardar(estados, fim, soma, texto, pior):
 
 
 def achar_marcador(img, digitos):
-    """O marcador na tela: Marcador ou None. Pinos sem distÃ¢ncia ao lado (o da "TRAJETÃ“RIA" na
-    queda, por exemplo) sÃ£o ignorados."""
+    """O marcador na tela: Marcador ou None. Pinos sem distância ao lado (o da "TRAJETÓRIA" na
+    queda, por exemplo) são ignorados."""
     a = np.asarray(img.convert("RGB"))
     h, w = a.shape[:2]
     for x, y in achar_pinos(a):
@@ -228,14 +235,14 @@ def _recorte(img, regiao):
 
 
 def ver_aviso(img, modelo, nome):
-    """O aviso `nome` ("pular" ou "vasculhar") estÃ¡ na tela? Devolve (nota, x, y)."""
+    """O aviso `nome` ("pular" ou "vasculhar") está na tela? Devolve (nota, x, y)."""
     pedaco, x0, y0 = _recorte(img, REGIAO_AVISOS[nome])
     nota, x, y = visao.procurar(visao.Quadro(pedaco, escala=1), modelo)
     return nota, x + x0, y + y0
 
 
 def icones_de_bau(img, modelo):
-    """Ãcones de baÃº no anel em volta da mira, do mais nÃ­tido para o menos: lista de IconeBau."""
+    """Ícones de baú no anel em volta da mira, do mais nítido para o menos: lista de IconeBau."""
     larg, alt = img.size
     cx, cy, r = larg / 2, alt / 2, ANEL[1] * alt
     pedaco = img.crop((round(cx - r), round(cy - r), round(cx + r), round(cy + r)))
@@ -248,15 +255,70 @@ def icones_de_bau(img, modelo):
     return icones
 
 
+def achar_ilha(tela, molde):
+    """Onde está a ilha `molde` (recorte de um print do mapa) na `tela`, em qualquer zoom.
+    Devolve (nota, escala, x do centro, y do centro), em pixels da tela.
+
+    Primeiro procura em 1/4 da resolução em vários tamanhos; depois afina o melhor em meia
+    resolução, porque é dele que sai o lugar do clique."""
+    larg, alt = tela.size
+    tw, th = molde.size
+
+    def melhor_em(escala_busca, escalas):
+        quadro = visao.Quadro(tela, escala=escala_busca)
+        melhor = (-1.0, 1.0, 0, 0)
+        for s in escalas:
+            if tw * s <= larg and th * s <= alt:
+                nota, x, y = visao.procurar(quadro, visao.Modelo(molde, escala=escala_busca * s))
+                melhor = max(melhor, (nota, s, x, y))
+        return melhor
+
+    _, s0, _, _ = melhor_em(0.25, np.geomspace(*ESCALAS_ILHA, 36))
+    return melhor_em(0.5, np.linspace(s0 * 0.96, s0 * 1.04, 9))
+
+
+def ponto_no_mapa(tela, molde, ponto):
+    """Onde fica na tela o `ponto` (x, y no molde) da ilha: (x, y) ou None se não achou a ilha."""
+    nota, s, cx, cy = achar_ilha(tela, molde)
+    if nota < NOTA_ILHA:
+        return None
+    tw, th = molde.size
+    return round(cx + (ponto[0] - tw / 2) * s), round(cy + (ponto[1] - th / 2) * s)
+
+
+def pino_perto(img, x, y):
+    """Tem o pino azul do marcador logo acima de (x, y)? É assim que o mapa mostra o marcador:
+    a ponta do pino no lugar do clique."""
+    a = np.asarray(img.convert("RGB").crop((x - 25, y - 45, x + 25, y + 10)))
+    return int((np.abs(a.astype(np.int16) - COR_PINO).max(axis=2) <= TOLERANCIA_COR).sum()) >= 20
+
+
 class Sinais:
-    """Todos os modelos de sinais/ carregados de uma vez."""
+    """Todos os modelos de sinais/ carregados de uma vez. O lugar para cair (lugar.json e o
+    recorte da ilha, ilha.png) é opcional: sem ele, o marcador é posto à mão."""
 
     def __init__(self, pasta=PASTA_SINAIS):
         self.digitos = Digitos.carregar(os.path.join(pasta, "digitos"))
         self.bau = visao.carregar_modelo(os.path.join(pasta, "bau.png"), escala=1)
         self.avisos = {
-            nome: visao.carregar_modelo(os.path.join(pasta, f"{nome}.png"), escala=1) for nome in REGIAO_AVISOS
+            nome: visao.carregar_modelo(os.path.join(pasta, f"{nome}.png"), escala=1)
+            for nome in REGIAO_AVISOS
+            if nome != "mapa" or os.path.exists(os.path.join(pasta, "mapa.png"))
         }
+        self.ilha, self.lugar = None, None
+        try:
+            with open(os.path.join(pasta, "lugar.json"), encoding="utf-8") as f:
+                lugar = json.load(f)
+            with Image.open(os.path.join(pasta, "ilha.png")) as img:
+                self.ilha = img.convert("RGB")
+            self.lugar = {"nome": str(lugar["nome"]), "x": float(lugar["x"]), "y": float(lugar["y"])}
+        except (OSError, ValueError, KeyError, TypeError):
+            self.ilha, self.lugar = None, None
+
+    @property
+    def tem_lugar(self):
+        """Dá para pôr o marcador sozinho: tem o lugar escolhido e o aviso do mapa aberto."""
+        return self.lugar is not None and "mapa" in self.avisos
 
     def marcador(self, img):
         return achar_marcador(img, self.digitos)
@@ -267,3 +329,9 @@ class Sinais:
     def aviso(self, img, nome):
         nota, _, _ = ver_aviso(img, self.avisos[nome], nome)
         return nota >= NOTA_AVISO
+
+    def lugar_no_mapa(self, img):
+        return ponto_no_mapa(img, self.ilha, (self.lugar["x"], self.lugar["y"]))
+
+    def marcador_no_mapa(self, img, x, y):
+        return pino_perto(img, x, y)

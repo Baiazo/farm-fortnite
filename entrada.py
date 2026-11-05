@@ -34,7 +34,10 @@ VK_F10 = 0x79
 BELOW_NORMAL_PRIORITY_CLASS = 0x4000
 
 # Scan codes físicos: o jogo lê a posição da tecla, não a letra
-SCAN = {"w": 0x11, "a": 0x1E, "s": 0x1F, "d": 0x20, "espaco": 0x39, "e": 0x12, "x": 0x2D, "f": 0x21}
+SCAN = {
+    "w": 0x11, "a": 0x1E, "s": 0x1F, "d": 0x20, "espaco": 0x39, "e": 0x12, "x": 0x2D, "f": 0x21,
+    "m": 0x32, "shift": 0x2A,  # mapa e "REDEFINIR" no mapa
+}
 
 
 class MOUSEINPUT(ctypes.Structure):

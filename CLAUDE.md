@@ -26,7 +26,7 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 | `automacao.py` | Thread que lê a tela, clica e grava prints da partida (opção, `auto-*.png`, até 200 por vez) + thread do anti-AFK (anda, pula e vira a câmera com mouse relativo, tempos sorteados) + `GravacaoSeguida` do F10 (`seguido-*.png`, só com o jogo em foco, até 300). Tudo que mexe fora do programa passa por `Sistema`, que os testes trocam por um falso |
 | `visao.py` | Correlação normalizada (mesma conta do `TM_CCOEFF_NORMED`) via FFT com numpy, em meia resolução (ou `escala=1` para ícones pequenos); `procurar_varios`; print preto e prints de travamento |
 | `leitura.py` | Leitor da partida: pino do marcador pela cor (22,124,231) + distância lida com modelos dos dígitos, ícone de baú no anel da mira (ângulo), avisos PULAR e VASCULHAR. Modelos em `sinais/` |
-| `piloto.py` | Piloto (opção `piloto`, desligada por padrão): fases esperando → onibus → queda/a_pe → baus → fim; distância só vale com duas leituras que concordam, saltos de leitura descartados. Roda numa thread da `Automacao`; o anti-AFK para e não pula enquanto ele existe |
+| `piloto.py` | Piloto (opção `piloto`, desligada por padrão): fases marcando (abre o mapa, Shift = REDEFINIR, acha a ilha em vários zooms, clica com o esquerdo, confere o pino, fecha) → esperando → onibus → queda/a_pe → baus → fim; distância só vale com duas leituras que concordam, saltos de leitura descartados. Roda numa thread da `Automacao`; o anti-AFK para e não pula enquanto ele existe |
 | `entrada.py` | `SendInput` com scan codes, F8, F9 e F10 por `RegisterHotKey` (id = tecla), janela em foco (título e classe, sem abrir o processo do jogo); DPI real e prioridade abaixo do normal |
 | `config.py` | `BOTOES` (a ordem é a prioridade de clique; `max_cliques` por botão), `Ajustes` salvos em `ajustes.json`, `LIMITES` |
 | `gerar_exe.py` | Chama o PyInstaller (ícone e versão gerados na hora em `build/`) e troca o programa em `dist\Farm\` mantendo os dados |
@@ -50,7 +50,7 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
 
 ## Estado
 
-- 67 testes passando; janela, estados e captura conferidos por print com botões falsos.
+- 76 testes passando; janela, estados e captura conferidos por print com botões falsos.
 - `Farm.exe` gerado e aberto aqui (abre em ~4 s, dados ao lado do exe, fecha sem erro).
 - Primeiro teste no Fortnite de verdade em 2026-11-03, pelo `Farm.exe`: pausou com o jogo fora de
   foco e voltou sozinho, clicou em Jogar (nota 0,98), a partida começou, o personagem morreu em ~4
@@ -90,5 +90,12 @@ confirmar que era o mesmo. Este projeto foi escrito do zero, sem copiar código 
   852 a 21 m com viradas pequenas, muda para baús a 21 m, segura X nos 4 VASCULHAR e encerra no
   tempo. Ganhos chutados (0,8 unidade de mouse por pixel, 10 por grau): conferir no primeiro teste
   de verdade. Ainda não testado: a hora do pulo do ônibus (só há 1 print de ônibus) e tudo ao vivo.
-- Próximo passo: teste ao vivo com ele pondo o marcador à mão; depois, o farm pôr o marcador no
-  mapa sozinho (achar a ilha no mapa por imagem, porque o zoom muda).
+- Marcador automático (pedido dele em 2026-11-05: "não quero pôr marcador"): o lugar é a Enseada
+  do Saque, onde ele vasculhou os 5 baús, guardado em `sinais/lugar.json` + `sinais/ilha.png`
+  (recorte da ilha no print do mapa). A busca da ilha em vários zooms acertou o lugar nos 3
+  prints do mapa com a ilha inteira e recusou os com zoom (por isso o Shift = REDEFINIR antes).
+  O ícone do mapa mostra que o marcador é com o botão esquerdo e o direito arrasta. Trocar o lugar
+  hoje é editar o `LUGAR` do `sinais/ferramentas/fazer_sinais.py` e rodar de novo; falta um jeito
+  na janela.
+- Próximo passo: primeiro teste ao vivo do piloto inteiro (marcar, pular, cair, baús), com F10
+  ligado no ônibus para conferir depois.

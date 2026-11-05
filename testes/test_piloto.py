@@ -16,10 +16,20 @@ TELA = SimpleNamespace(size=(1920, 1080))
 class SinaisFalsos:
     """O que o leitor "viu" no print atual; o teste muda antes de cada passo."""
 
-    def __init__(self):
+    def __init__(self, tem_lugar=False):
         self.m = None
         self.icones = []
-        self.avisos = set()
+        self.avisos = set()  # "pular", "vasculhar", "mapa" (o mapa está aberto)
+        self.tem_lugar = tem_lugar
+        self.lugar = {"nome": "Enseada do Saque", "x": 258, "y": 143}
+        self.alvo = (1158, 475)  # onde a ilha diz que fica o lugar (None: não achou a ilha)
+        self.pino = True          # o marcador apareceu no mapa depois do clique
+
+    def lugar_no_mapa(self, img):
+        return self.alvo
+
+    def marcador_no_mapa(self, img, x, y):
+        return self.pino
 
     def marcador(self, img):
         return self.m
@@ -47,6 +57,79 @@ class SistemaFalso:
 
     def virar(self, dx, dy=0):
         self.feito.append(("virar", dx))
+
+    def clicar(self, x, y):
+        self.feito.append(("clicar", (x, y)))
+
+
+class TestMarcarNoMapa(unittest.TestCase):
+    def setUp(self):
+        self.sinais, self.sistema, self.avisos = SinaisFalsos(tem_lugar=True), SistemaFalso(), []
+        self.p = piloto.Piloto(self.sinais, self.sistema, lambda t, tipo="info": self.avisos.append(t),
+                               Ajustes(tecla_interagir="x"))
+
+    def _passo(self, segundos=1.0, mapa=None):
+        if mapa is not None:
+            self.sinais.avisos = {"mapa"} if mapa else set()
+        self.sistema.tempo += segundos
+        self.sistema.feito = []
+        self.p.passo(TELA)
+        return self.sistema.feito
+
+    def _cliques(self, feito):
+        return [lugar for acao, lugar in feito if acao == "clicar"]
+
+    def test_abre_redefine_clica_confere_e_fecha(self):
+        self.assertEqual(self.p.fase, "marcando")
+        self.assertTrue(self.p.no_controle)  # o anti-AFK fica parado enquanto mexe no mapa
+        self.assertEqual(self._passo(mapa=False), [("apertar", "m")])
+        self.assertEqual(self._passo(mapa=True), [("soltar", "m"), ("apertar", "shift")])  # REDEFINIR
+        feito = self._passo()
+        self.assertEqual(self._cliques(feito), [(1158, 475)])
+        feito = self._passo()
+        self.assertIn(("apertar", "m"), feito)  # fecha o mapa
+        self.assertIn("Enseada do Saque", self.avisos[-1])
+        self._passo(mapa=False)
+        self.assertEqual(self.p.fase, "esperando")
+
+    def test_partida_carregando_tenta_abrir_de_novo(self):
+        apertos = 0
+        for _ in range(10):
+            apertos += self._passo(mapa=False).count(("apertar", "m"))
+        self.assertGreaterEqual(apertos, 3)  # a cada TENTAR_MAPA s
+        self.assertEqual(self._cliques(self.sistema.feito), [])
+
+    def test_nunca_clica_com_o_mapa_fechado(self):
+        cliques = []
+        for _ in range(piloto.TEMPO_MARCANDO + 2):
+            cliques += self._cliques(self._passo(mapa=False))
+        self.assertEqual(cliques, [])
+        self.assertEqual(self.p.fase, "esperando")
+        self.assertIn("à mão", self.avisos[-1])
+
+    def test_sem_ilha_tenta_tres_vezes_e_desiste(self):
+        self.sinais.alvo = None
+        self._passo(mapa=False)
+        self._passo(mapa=True)
+        for _ in range(piloto.TENTATIVAS_MAPA):
+            feito = self._passo()
+        self.assertIn(("apertar", "m"), feito)
+        self.assertIn("ponha o marcador à mão", self.avisos[-1])
+        self._passo(mapa=False)
+        self.assertEqual(self.p.fase, "esperando")
+
+    def test_marcador_nao_apareceu_clica_de_novo_ao_lado(self):
+        self.sinais.pino = False
+        self._passo(mapa=False)
+        self._passo(mapa=True)
+        primeiro = self._cliques(self._passo())
+        self._passo()  # conferiu: sem pino; aperta REDEFINIR de novo
+        segundo = self._cliques(self._passo())
+        self.assertNotEqual(primeiro, segundo)  # ao lado, para não tirar o marcador
+
+    def test_sem_lugar_escolhido_comeca_esperando(self):
+        p = piloto.Piloto(SinaisFalsos(), self.sistema, lambda t, tipo="info": None, Ajustes())
+        self.assertEqual(p.fase, "esperando")
 
 
 class TestPiloto(unittest.TestCase):

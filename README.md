@@ -117,16 +117,19 @@ F9 (`partida-...png`). Cada print tem uns 3 MB em 1080p, então ele para depois 
 
 1. Marque **Piloto: cair no marcador e vasculhar baús**, escolha quantos baús por partida e a
    **tecla de interagir** igual à dos controles do seu Fortnite (o padrão do jogo é E).
-2. Em cada partida, antes de o ônibus sair, abra o mapa (M) e ponha o marcador onde quer cair, de
-   preferência em cima de onde ficam os baús. Por enquanto o marcador é com você.
-3. Deixe ligado "Visualizar efeitos sonoros" nas opções de áudio do Fortnite: o piloto acha os
+2. Deixe ligado "Visualizar efeitos sonoros" nas opções de áudio do Fortnite: o piloto acha os
    baús pelo ícone que aparece em volta da mira.
+3. O marcador: com um lugar escolhido em `sinais/` (`lugar.json` e o recorte da ilha,
+   `ilha.png`), ele mesmo abre o mapa no começo da partida, aperta REDEFINIR (Shift) para ver a
+   ilha inteira, clica no lugar com o botão esquerdo, confere o pino e fecha. Sem lugar escolhido,
+   ponha você o marcador antes de o ônibus sair.
 
 O que ele faz: no ônibus, acompanha a distância até o marcador e pula quando ela para de cair;
 na queda, segura W e vira a câmera até o pino ficar no meio da tela; perto do marcador, vira para
 o ícone de baú, anda até aparecer "VASCULHAR" e segura a tecla de interagir. Depois de abrir os
 baús (ou em 2 min), devolve a partida para o anti-AFK. Sem marcador, ele desiste no ônibus e
-avisa no registro.
+avisa no registro. Ele só clica no mapa quando o print daquele mesmo instante mostra o mapa
+aberto, para nunca disparar um clique no jogo.
 
 Ele lê a tela com modelos recortados dos prints do seu jogo, que ficam em `sinais/`. Se a pasta
 não existir, o piloto fica desligado e o registro avisa.
